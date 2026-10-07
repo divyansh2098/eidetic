@@ -6,16 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   ArrowUpRight,
   Cpu,
-  Terminal,
-  Sliders,
-  Maximize2,
-  Lock,
-  Layers,
-  Sparkles,
-  ShieldCheck,
-  Zap,
-  Check,
-  ChevronDown,
+  Terminal
 } from "lucide-react";
 
 export default function HomePage() {
