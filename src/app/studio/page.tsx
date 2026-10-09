@@ -979,20 +979,21 @@ export default function StudioPage() {
                     ))}
                   </div>
 
-                  <div className="flex flex-col md:flex-row items-center gap-2">
-                    {/* PART A: Tactile Format Preset Dial / Segmented Rocker */}
-                    <div className="w-full md:w-auto shrink-0">
-                      <FormatPresetsBar
-                        selectedPreset={selectedPreset}
-                        onSelectPreset={handleSelectPreset}
-                        customRatio={customRatio}
-                        setCustomRatio={setCustomRatio}
-                      />
-                    </div>
+                  {/* PART A: Tactile Format Preset Dial / Segmented Rocker */}
+                  <div className="w-full mb-2">
+                    <FormatPresetsBar
+                      selectedPreset={selectedPreset}
+                      onSelectPreset={handleSelectPreset}
+                      customRatio={customRatio}
+                      setCustomRatio={setCustomRatio}
+                    />
+                  </div>
 
-                    {/* PART B: Direct Specification Input Well */}
-                    <div className="relative flex-1 w-full bg-[#0c0e12] rounded-[2px] border border-[#232936] shadow-[inset_0_1px_3px_rgba(0,0,0,0.8)] flex items-center px-2.5 py-1.5 focus-within:border-[#333842] transition-colors">
-                      <span className="font-mono text-[#8f9194] text-[11px] mr-2 shrink-0 select-none">
+                  {/* PART B & C: Main Input Well + Generate Trigger */}
+                  <div className="flex items-center gap-2">
+                    {/* Direct Specification Input Well */}
+                    <div className="relative flex-1 bg-[#0c0e12] rounded-[2px] border border-[#232936] shadow-[inset_0_1px_3px_rgba(0,0,0,0.8)] flex items-center px-3 h-10 focus-within:border-[#4edea3]/60 transition-colors">
+                      <span className="font-mono text-[#4edea3] text-xs mr-2.5 shrink-0 select-none font-semibold">
                         &gt;
                       </span>
                       <input
@@ -1006,7 +1007,7 @@ export default function StudioPage() {
                             handleSendMessage();
                           }
                         }}
-                        placeholder={`Direct visual specification for ${activeBrand.brand_name}...`}
+                        placeholder={`Describe the visual to craft for ${activeBrand.brand_name}...`}
                         className="w-full bg-transparent border-none outline-none font-sans text-xs text-[#eef1f7] placeholder-[#8f9194] font-normal tracking-tight"
                       />
                       {inputPrompt && (
@@ -1021,13 +1022,13 @@ export default function StudioPage() {
                       )}
                     </div>
 
-                    {/* PART C: Primary Instrument Trigger [GENERATE] */}
+                    {/* Primary Instrument Trigger [GENERATE] */}
                     <button
                       id="send-prompt-btn"
                       type="button"
                       disabled={!inputPrompt.trim() || isGenerating}
                       onClick={() => handleSendMessage()}
-                      className={`w-full md:w-auto shrink-0 h-8 px-4 rounded-[2px] font-mono text-[10px] tracking-wider uppercase font-semibold flex items-center justify-center gap-1.5 border border-white/20 active:translate-y-[1px] transition-all ${
+                      className={`shrink-0 h-10 px-5 rounded-[2px] font-mono text-[10px] tracking-wider uppercase font-semibold flex items-center justify-center gap-2 border border-white/20 active:translate-y-[1px] transition-all ${
                         inputPrompt.trim() && !isGenerating
                           ? "bg-[#eef1f7] hover:bg-white text-[#0c0e12] shadow-[0_2px_6px_rgba(0,0,0,0.6)] cursor-pointer"
                           : "bg-[#1e2024] text-[#8f9194] border-[#232936] cursor-not-allowed opacity-60"
