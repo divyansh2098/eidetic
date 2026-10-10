@@ -4,7 +4,7 @@
 export const aiConfig = {
   orchestrator: {
     provider: (process.env.ORCHESTRATOR_PROVIDER || "gemini") as "gemini" | "openai",
-    model: process.env.ORCHESTRATOR_MODEL || "gemini-2.0-flash",
+    model: process.env.ORCHESTRATOR_MODEL || "gemini-3.8-flash",
   },
   imageGenerator: {
     provider: (process.env.IMAGE_PROVIDER || "gemini") as "gemini" | "openai" | "stability",
