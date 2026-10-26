@@ -25,7 +25,8 @@
 # misc
 .DS_Store
 *.pem
-recovery-codes.txt
+recovery-codes*
+.recovery-codes*
 
 # debug
 npm-debug.log*
