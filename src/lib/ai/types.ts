@@ -2,7 +2,18 @@
 // Every AI provider (Gemini, OpenAI, Stability, etc.) implements these interfaces.
 // Switching providers is a config change, not a code change.
 
-import { type AspectRatio, type BrandProfile, type Message } from "@/types/database";
+import { type AspectRatio, type BrandProfile, type Message, type PosterSpec, type Attachment } from "@/types/database";
+
+// ─── Reference Images & Multimodal Parts ────────────────────────
+
+export interface ReferenceImageInput {
+  storagePath?: string;
+  signedUrl?: string;
+  dataBase64?: string;
+  mimeType: string;
+  label?: string;
+  role?: "logo" | "base_photo" | "supplementary" | "style_reference";
+}
 
 // ─── Image Generator ────────────────────────────────────────────
 
@@ -15,6 +26,8 @@ export interface ImageGenerationRequest {
   style?: string;
   brandProfile?: BrandProfile;
   formatPreset?: string;
+  referenceImages?: ReferenceImageInput[];
+  posterSpec?: PosterSpec;
 }
 
 export interface ImageGenerationResponse {
@@ -25,6 +38,7 @@ export interface ImageGenerationResponse {
     model: string;
     inferenceTimeMs: number;
     estimatedCostUsd: number;
+    finishReason?: string;
   };
 }
 
@@ -46,6 +60,9 @@ export interface OrchestratorRequest {
   brandProfile: BrandProfile;
   conversationHistory: Pick<Message, "role" | "content">[];
   systemPrompt?: string;
+  currentSpec?: PosterSpec | null;
+  attachments?: Attachment[];
+  referenceImages?: ReferenceImageInput[];
   outputConstraints: {
     aspectRatio: AspectRatio;
     formatPreset: string;
@@ -61,6 +78,7 @@ export interface OrchestratorResponse {
   textOverlays?: TextOverlay[];
   layoutHints?: string;
   chatResponse: string;
+  updatedSpec?: PosterSpec;
 }
 
 export interface OrchestratorProvider {

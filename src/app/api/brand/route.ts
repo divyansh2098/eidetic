@@ -10,6 +10,8 @@ function mapDbRowToBrandProfile(row: any): BrandProfile {
     tenant_id: row.tenant_id,
     brand_name: row.name,
     logo_url: row.logo_url || null,
+    logo_storage_path: row.logo_storage_path || null,
+    logo_raster_storage_path: row.logo_raster_storage_path || null,
     primary_colour: row.color_palette?.primary || "#10B981",
     secondary_colours: row.color_palette?.secondaries || ["#064E3B", "#34D399"],
     typography: row.typography?.family || "Inter",
@@ -96,6 +98,8 @@ export async function POST(req: NextRequest) {
       tagline: body.tagline ? String(body.tagline).trim() : null,
       description: (body.brand_description || body.description || "Brand visual profile").trim(),
       logo_url: body.logo_url || null,
+      logo_storage_path: body.logo_storage_path || null,
+      logo_raster_storage_path: body.logo_raster_storage_path || null,
       always_include_logo: Boolean(body.auto_include_logo),
       color_palette: {
         primary: body.primary_colour || "#10B981",

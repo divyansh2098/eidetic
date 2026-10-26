@@ -1,59 +1,85 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { BrandProfile, ToneOfVoice, LogoPosition } from "@/types/database";
-import { Save, Check, Upload, ShieldCheck, FileText, Lock, Terminal, Cpu } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { uploadBrandLogo } from "@/lib/utils/logo-upload";
+import {
+  Upload,
+  Check,
+  Save,
+  Edit2,
+  RotateCcw,
+  Pipette,
+  ArrowUpLeft,
+  ArrowUpRight,
+  Crosshair,
+  ArrowDownLeft,
+  ArrowDownRight,
+} from "lucide-react";
 
 interface BrandProfileViewProps {
   brand: BrandProfile;
-  onUpdateBrand: (updated: BrandProfile) => void;
+  onUpdateBrand: (updated: BrandProfile) => Promise<void> | void;
 }
 
-const ALL_TONES: ToneOfVoice[] = [
-  "minimalist",
-  "bold",
-  "professional",
-  "playful",
-  "warm",
-  "casual",
-  "elegant",
-  "friendly",
+const LOGO_POSITIONS: { key: LogoPosition; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: "top-left", label: "Top Left", icon: ArrowUpLeft },
+  { key: "top-right", label: "Top Right", icon: ArrowUpRight },
+  { key: "center-watermark", label: "Center Watermark", icon: Crosshair },
+  { key: "bottom-left", label: "Bottom Left", icon: ArrowDownLeft },
+  { key: "bottom-right", label: "Bottom Right", icon: ArrowDownRight },
 ];
 
-const LOGO_POSITIONS: { key: LogoPosition; label: string; quadrant: string }[] = [
-  { key: "top-left", label: "NW QUADRANT", quadrant: "TL" },
-  { key: "top-right", label: "NE QUADRANT", quadrant: "TR" },
-  { key: "bottom-left", label: "SW QUADRANT", quadrant: "BL" },
-  { key: "bottom-right", label: "SE QUADRANT", quadrant: "BR" },
-  { key: "center-watermark", label: "CENTER EMBOSS", quadrant: "CTR" },
+const TONE_OPTIONS: { key: ToneOfVoice; label: string }[] = [
+  { key: "bold", label: "Bold" },
+  { key: "playful", label: "Playful" },
+  { key: "minimalist", label: "Minimalist" },
+  { key: "friendly", label: "Friendly" },
+  { key: "warm", label: "Warm" },
+  { key: "casual", label: "Casual" },
+  { key: "professional", label: "Professional" },
+  { key: "elegant", label: "Elegant" },
 ];
 
 export function BrandProfileView({ brand, onUpdateBrand }: BrandProfileViewProps) {
   const [formData, setFormData] = useState<BrandProfile>({ ...brand });
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [isParsing, setIsParsing] = useState(false);
-  const [guidelinesFileName, setGuidelinesFileName] = useState<string | null>(
-    brand.guidelines_doc_url ? "brand_guidelines.pdf" : null
-  );
-  const [guidelinesParsed, setGuidelinesParsed] = useState<boolean>(
-    Boolean(brand.guidelines_doc_url)
-  );
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
 
-  const handleGuidelinesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setGuidelinesFileName(file.name);
-    setIsParsing(true);
+    setIsUploadingLogo(true);
+    setLogoUploadError(null);
 
-    setTimeout(() => {
-      setIsParsing(false);
-      setGuidelinesParsed(true);
+    try {
+      const supabase = createClient();
+      const result = await uploadBrandLogo(supabase, formData.id, file, {
+        logo_storage_path: formData.logo_storage_path,
+        logo_raster_storage_path: formData.logo_raster_storage_path,
+      });
+
       setFormData((prev) => ({
         ...prev,
-        guidelines_doc_url: `https://storage.eidetic.app/guidelines/${file.name}`,
+        logo_url: result.public_url,
+        logo_storage_path: result.logo_storage_path,
+        logo_raster_storage_path: result.logo_raster_storage_path,
       }));
-    }, 900);
+    } catch (err: any) {
+      console.error("[BrandProfileView] Logo upload failed:", err);
+      setLogoUploadError(err.message || "Failed to upload logo.");
+    } finally {
+      setIsUploadingLogo(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
   };
 
   const handleToneToggle = (tone: ToneOfVoice) => {
@@ -70,411 +96,414 @@ export function BrandProfileView({ brand, onUpdateBrand }: BrandProfileViewProps
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdateBrand(formData);
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    await onUpdateBrand(formData);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
 
+  const currentAnchor = formData.logo_position || "top-left";
+
   return (
-    <div className="flex-1 h-full overflow-y-auto p-4 md:p-8 space-y-6 optical-grid-fine" id="brand-profile-view">
-      {/* Sub-header Calibration Rail */}
-      <div className="w-full bg-[#111317] p-3 rounded-[2px] border border-[#232936] flex flex-wrap items-center justify-between gap-3 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-[#8f9194]">
-            <span>SYS.ENG</span>
-            <span className="text-[#333842]">/</span>
-            <span className="text-[#c5c6ca]">CALIBRATION</span>
-            <span className="text-[#333842]">/</span>
-            <span className="text-[#eef1f7] font-semibold">BRAND DNA MATRIX</span>
+    <div className="flex-1 h-full overflow-y-auto bg-[#f7f9ff] text-[#181c20] p-6 lg:p-10 space-y-8" id="brand-dna-view">
+      {/* Header Context Block */}
+      <div className="max-w-5xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#e2dfff] text-[#3422cc] font-mono text-[11px] font-bold uppercase mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#5046e5]" />
+            Active Brand Identity
           </div>
-          <div className="h-3 w-px bg-[#232936] hidden sm:block" />
-          <div className="flex items-center gap-1.5 bg-[#0c0e12] px-2 py-0.5 rounded-[1px] border border-[#232936]">
-            <span className="font-mono text-[9px] text-[#8f9194]">PROFILE:</span>
-            <span className="font-mono text-[9px] text-[#eef1f7] font-medium">{formData.brand_name}</span>
-          </div>
+          <h1 className="font-['Space_Grotesk'] text-3xl font-bold text-[#181c20] tracking-tight">
+            Brand DNA & Profile
+          </h1>
+          <p className="text-sm text-[#464555] max-w-xl mt-1 leading-relaxed">
+            Customize the colors, typography, tone, and logo anchors used across your generated graphics.
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#0c0e12] rounded-[1px] border border-[#232936]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#4edea3] shadow-[0_0_6px_rgba(78,222,163,0.9)]" />
-            <span className="font-mono text-[9px] text-[#4edea3] uppercase font-semibold">DNA LOCKED</span>
-            <span className="font-mono text-[8px] text-[#8f9194]">// REV: 8941</span>
+        <button
+          type="button"
+          id="save-brand-profile-top-btn"
+          onClick={() => handleSave()}
+          className="h-10 px-6 rounded-full bg-[#5046e5] hover:bg-[#4338ca] text-white font-['Space_Grotesk'] text-xs font-semibold shadow-sm flex items-center gap-2 transition-all cursor-pointer self-start md:self-auto"
+        >
+          {savedSuccess ? (
+            <>
+              <Check className="w-4 h-4" />
+              <span>Saved</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              <span>Save Changes</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Brand Identity Card */}
+      <div className="max-w-5xl mx-auto bg-white rounded-3xl p-6 lg:p-8 border border-[#e0e2e8] shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5046e5] to-[#fb603f] p-0.5 flex items-center justify-center shrink-0">
+            <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center overflow-hidden">
+              {formData.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={formData.logo_url} alt="Logo" className="w-full h-full object-contain p-2" />
+              ) : (
+                <span className="font-['Space_Grotesk'] text-xl font-bold text-[#5046e5]">
+                  {formData.brand_name.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+            </div>
           </div>
 
-          <button
-            id="save-brand-btn"
-            type="button"
-            onClick={handleSave}
-            className="h-8 px-4 rounded-[2px] bg-[#eef1f7] hover:bg-white text-[#0c0e12] font-mono text-[10px] tracking-wider uppercase font-semibold flex items-center gap-1.5 border border-white/20 shadow-sm active:translate-y-[1px] transition-all"
-          >
-            {savedSuccess ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-[#0c0e12]" />
-                LOCKED TO ENGINE
-              </>
-            ) : (
-              <>
-                <Save className="w-3.5 h-3.5" />
-                SAVE DNA
-              </>
-            )}
-          </button>
+          <div className="flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              {isEditingName ? (
+                <input
+                  type="text"
+                  value={formData.brand_name}
+                  onChange={(e) => setFormData({ ...formData, brand_name: e.target.value })}
+                  onBlur={() => setIsEditingName(false)}
+                  autoFocus
+                  className="font-['Space_Grotesk'] text-2xl font-bold text-[#181c20] bg-[#f1f3f9] px-2 py-0.5 rounded-lg border border-[#5046e5] outline-none"
+                />
+              ) : (
+                <h2 className="font-['Space_Grotesk'] text-2xl font-bold text-[#181c20] tracking-tight">
+                  {formData.brand_name}
+                </h2>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsEditingName(!isEditingName)}
+                className="w-7 h-7 rounded-full bg-[#f1f3f9] hover:bg-[#e0e2e8] text-[#464555] flex items-center justify-center transition-colors"
+                title="Edit brand name"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#464555] mb-1">
+                Brand Description
+              </label>
+              <textarea
+                value={formData.brand_description}
+                onChange={(e) => setFormData({ ...formData, brand_description: e.target.value })}
+                rows={2}
+                placeholder="Describe your brand, product, and style in a sentence or two..."
+                className="w-full bg-[#f1f3f9] focus:bg-white text-sm text-[#181c20] p-3 rounded-2xl border border-transparent focus:border-[#5046e5]/40 outline-none transition-colors"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Main 2-Column Calibrated Workbench */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
-        {/* LEFT COLUMN: Identity & Spectral Color Matrix */}
-        <div className="lg:col-span-7 flex flex-col gap-6">
-          {/* Unit 01 // Identity Parameters (Recessed wells) */}
-          <div className="bg-[#111317] p-4 rounded-lg border border-[#232936] shadow-sm flex flex-col gap-3 relative">
-            <div className="absolute top-0 inset-x-2 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
-            <div className="flex items-center justify-between pb-1 border-b border-[#232936]/60">
-              <span className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                UNIT 01 // IDENTITY PARAMETERS
-              </span>
-              <span className="font-mono text-[9px] text-[#4edea3] uppercase font-semibold">REG.0x11</span>
+      {/* Two-Column Editor Layout */}
+      <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        {/* LEFT COLUMN: Palette & Typography */}
+        <div className="flex flex-col gap-8">
+          {/* Color Palette */}
+          <div className="bg-white rounded-3xl p-6 lg:p-8 border border-[#e0e2e8] shadow-sm space-y-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-['Space_Grotesk'] text-lg font-bold text-[#181c20]">
+                  Color Palette
+                </h3>
+                <p className="text-xs text-[#464555]">
+                  Click swatches to choose your primary and secondary colors.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData({
+                    ...formData,
+                    primary_colour: "#5046e5",
+                    secondary_colours: ["#fb603f", "#181829"],
+                  })
+                }
+                className="w-8 h-8 rounded-full bg-[#f1f3f9] text-[#464555] hover:text-[#181c20] flex items-center justify-center transition-colors"
+                title="Reset to default palette"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Brand Designation Well */}
-              <div className="flex flex-col gap-1">
-                <label className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                  Entity Name
-                </label>
-                <div className="bg-[#0c0e12] p-2 rounded-[1px] border border-[#232936] flex items-center justify-between shadow-inner">
+            <div className="grid grid-cols-3 gap-3">
+              {/* Primary */}
+              <div className="rounded-2xl p-3 bg-[#f1f3f9] border border-[#e0e2e8] flex flex-col justify-between h-32">
+                <label
+                  className="relative w-full h-14 rounded-xl shadow-sm flex items-end justify-end p-1.5 cursor-pointer overflow-hidden"
+                  style={{ backgroundColor: formData.primary_colour }}
+                >
                   <input
-                    id="input-brand-name"
-                    type="text"
-                    value={formData.brand_name}
-                    onChange={(e) => setFormData({ ...formData, brand_name: e.target.value })}
-                    className="bg-transparent font-mono text-xs text-[#eef1f7] outline-none w-full"
+                    type="color"
+                    value={formData.primary_colour}
+                    onChange={(e) => setFormData({ ...formData, primary_colour: e.target.value })}
+                    className="opacity-0 absolute inset-0 cursor-pointer w-full h-full"
                   />
-                  <Lock className="w-3 h-3 text-[#8f9194] ml-1 shrink-0" />
+                  <Pipette className="w-3.5 h-3.5 text-white drop-shadow" />
+                </label>
+                <div>
+                  <div className="text-xs font-semibold text-[#181c20]">Primary</div>
+                  <div className="font-mono text-[11px] text-[#464555]">{formData.primary_colour}</div>
                 </div>
               </div>
 
-              {/* Space Descriptor */}
-              <div className="flex flex-col gap-1">
-                <label className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                  Sub-Tier / Industry
-                </label>
-                <div className="bg-[#0c0e12] p-2 rounded-[1px] border border-[#232936] flex items-center justify-between shadow-inner">
+              {/* Secondary 1 */}
+              <div className="rounded-2xl p-3 bg-[#f1f3f9] border border-[#e0e2e8] flex flex-col justify-between h-32">
+                <label
+                  className="relative w-full h-14 rounded-xl shadow-sm flex items-end justify-end p-1.5 cursor-pointer overflow-hidden"
+                  style={{ backgroundColor: formData.secondary_colours[0] || "#fb603f" }}
+                >
                   <input
-                    id="input-brand-industry"
-                    type="text"
-                    value={formData.industry}
-                    onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                    className="bg-transparent font-mono text-xs text-[#c5c6ca] outline-none w-full"
+                    type="color"
+                    value={formData.secondary_colours[0] || "#fb603f"}
+                    onChange={(e) => {
+                      const newColors = [...formData.secondary_colours];
+                      newColors[0] = e.target.value;
+                      setFormData({ ...formData, secondary_colours: newColors });
+                    }}
+                    className="opacity-0 absolute inset-0 cursor-pointer w-full h-full"
                   />
-                  <span className="font-mono text-[8px] text-[#8f9194]">SYS</span>
+                  <Pipette className="w-3.5 h-3.5 text-white drop-shadow" />
+                </label>
+                <div>
+                  <div className="text-xs font-semibold text-[#181c20]">Secondary</div>
+                  <div className="font-mono text-[11px] text-[#464555]">{formData.secondary_colours[0] || "#fb603f"}</div>
                 </div>
               </div>
-            </div>
 
-            {/* Mission Mandate Well */}
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <label className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                  Aesthetic Mandate / Brand Vision
+              {/* Secondary 2 */}
+              <div className="rounded-2xl p-3 bg-[#f1f3f9] border border-[#e0e2e8] flex flex-col justify-between h-32">
+                <label
+                  className="relative w-full h-14 rounded-xl shadow-sm flex items-end justify-end p-1.5 cursor-pointer overflow-hidden"
+                  style={{ backgroundColor: formData.secondary_colours[1] || "#181829" }}
+                >
+                  <input
+                    type="color"
+                    value={formData.secondary_colours[1] || "#181829"}
+                    onChange={(e) => {
+                      const newColors = [...formData.secondary_colours];
+                      newColors[1] = e.target.value;
+                      setFormData({ ...formData, secondary_colours: newColors });
+                    }}
+                    className="opacity-0 absolute inset-0 cursor-pointer w-full h-full"
+                  />
+                  <Pipette className="w-3.5 h-3.5 text-white drop-shadow" />
                 </label>
-                <span className="font-mono text-[8px] text-[#8f9194]">PAYLOAD</span>
-              </div>
-              <div className="bg-[#0c0e12] p-2 rounded-[1px] border border-[#232936] shadow-inner flex items-start gap-2">
-                <Terminal className="w-3.5 h-3.5 text-[#8f9194] mt-0.5 shrink-0" />
-                <textarea
-                  id="input-brand-description"
-                  rows={2}
-                  value={formData.brand_description}
-                  onChange={(e) => setFormData({ ...formData, brand_description: e.target.value })}
-                  className="bg-transparent font-mono text-xs text-[#eef1f7] outline-none w-full resize-none leading-relaxed"
-                />
-              </div>
-            </div>
-
-            {/* Target Audience Well */}
-            <div className="flex flex-col gap-1">
-              <label className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                Target Demographic Array
-              </label>
-              <div className="bg-[#0c0e12] p-2 rounded-[1px] border border-[#232936] shadow-inner">
-                <input
-                  id="input-target-audience"
-                  type="text"
-                  value={formData.target_audience || ""}
-                  onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
-                  className="bg-transparent font-mono text-xs text-[#eef1f7] outline-none w-full"
-                />
+                <div>
+                  <div className="text-xs font-semibold text-[#181c20]">Accent</div>
+                  <div className="font-mono text-[11px] text-[#464555]">{formData.secondary_colours[1] || "#181829"}</div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Unit 02 // Spectral Color Matrix */}
-          <div className="bg-[#111317] p-4 rounded-lg border border-[#232936] shadow-sm flex flex-col gap-3 relative">
-            <div className="absolute top-0 inset-x-2 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
-            <div className="flex items-center justify-between pb-1 border-b border-[#232936]/60">
-              <span className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                UNIT 02 // SPECTRAL COLOR MATRIX
-              </span>
-              <div className="flex items-center gap-1.5 font-mono text-[9px] text-[#8f9194]">
-                <span>D65 ILLUM</span>
-                <span>•</span>
-                <span className="text-[#4edea3]">CALIBRATED</span>
+          {/* Typography */}
+          <div className="bg-white rounded-3xl p-6 lg:p-8 border border-[#e0e2e8] shadow-sm space-y-4">
+            <h3 className="font-['Space_Grotesk'] text-lg font-bold text-[#181c20]">
+              Brand Typography
+            </h3>
+            <div className="p-4 rounded-2xl bg-[#f1f3f9] border border-[#e0e2e8] space-y-2">
+              <div className="text-xs font-semibold text-[#464555]">Primary Headline Typeface</div>
+              <div className="font-['Space_Grotesk'] text-xl font-bold text-[#181c20]">
+                Space Grotesk
               </div>
-            </div>
-
-            {/* Primary & Secondary Color Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Primary Color Picker */}
-              <div className="flex flex-col gap-1">
-                <label className="font-mono text-[9px] text-[#8f9194] uppercase">
-                  Primary Core Accent
-                </label>
-                <div className="bg-[#0c0e12] p-1.5 rounded-[1px] border border-[#232936] flex items-center gap-2">
-                  <input
-                    id="picker-primary-color"
-                    type="color"
-                    value={formData.primary_colour}
-                    onChange={(e) => setFormData({ ...formData, primary_colour: e.target.value })}
-                    className="w-6 h-6 rounded-[1px] bg-transparent border-0 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={formData.primary_colour}
-                    onChange={(e) => setFormData({ ...formData, primary_colour: e.target.value })}
-                    className="bg-transparent font-mono text-xs text-[#eef1f7] outline-none w-full uppercase"
-                  />
-                </div>
-              </div>
-
-              {/* Supporting Secondary Tones */}
-              <div className="flex flex-col gap-1">
-                <label className="font-mono text-[9px] text-[#8f9194] uppercase">
-                  Supporting Tones (Hex)
-                </label>
-                <div className="bg-[#0c0e12] p-1.5 rounded-[1px] border border-[#232936] flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={formData.secondary_colours.join(", ")}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        secondary_colours: e.target.value.split(",").map((s) => s.trim()),
-                      })
-                    }
-                    className="bg-transparent font-mono text-xs text-[#eef1f7] outline-none w-full uppercase"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Swatch Array Rack */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-              {/* Primary Swatch */}
-              <div className="bg-[#0c0e12] p-2 rounded-[1px] border border-[#232936] flex flex-col gap-1.5">
-                <div
-                  className="w-full h-12 rounded-[1px] relative overflow-hidden flex items-end p-1 border border-black/40"
-                  style={{ backgroundColor: formData.primary_colour }}
-                >
-                  <span className="font-mono text-[8px] font-bold px-1 bg-[#0c0e12]/80 text-white rounded-[1px]">
-                    CORE
-                  </span>
-                </div>
-                <div className="flex justify-between items-center font-mono text-[9px]">
-                  <span className="text-[#8f9194]">HEX</span>
-                  <span className="text-[#eef1f7] font-semibold">{formData.primary_colour.toUpperCase()}</span>
-                </div>
-                <div className="h-1 bg-[#1e2024] rounded-full overflow-hidden">
-                  <div className="h-full bg-[#4edea3] w-[95%]" />
-                </div>
-              </div>
-
-              {/* Secondary Swatches */}
-              {formData.secondary_colours.map((col, idx) => (
-                <div key={idx} className="bg-[#0c0e12] p-2 rounded-[1px] border border-[#232936] flex flex-col gap-1.5">
-                  <div
-                    className="w-full h-12 rounded-[1px] relative overflow-hidden flex items-end p-1 border border-black/40"
-                    style={{ backgroundColor: col }}
-                  >
-                    <span className="font-mono text-[8px] font-bold px-1 bg-[#0c0e12]/80 text-white rounded-[1px]">
-                      SEC_{idx + 1}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center font-mono text-[9px]">
-                    <span className="text-[#8f9194]">HEX</span>
-                    <span className="text-[#eef1f7] font-semibold">{col.toUpperCase()}</span>
-                  </div>
-                  <div className="h-1 bg-[#1e2024] rounded-full overflow-hidden">
-                    <div className="h-full bg-[#8f9194] w-[60%]" />
-                  </div>
-                </div>
-              ))}
+              <p className="text-xs text-[#777587]">
+                Paired with Inter for clean, legible body text across all output graphics.
+              </p>
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Logo Anchor Matrix, Typography, Guidelines */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
-          {/* Unit 03 // Logo & Watermark Anchor Matrix */}
-          <div className="bg-[#111317] p-4 rounded-lg border border-[#232936] shadow-sm flex flex-col gap-3 relative">
-            <div className="absolute top-0 inset-x-2 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
-            <div className="flex items-center justify-between pb-1 border-b border-[#232936]/60">
-              <span className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                UNIT 03 // LOGO QUADRANT ANCHOR
-              </span>
-              <label className="flex items-center gap-1.5 cursor-pointer font-mono text-[9px] text-[#c5c6ca]">
-                <input
-                  id="toggle-always-include-logo"
-                  type="checkbox"
-                  checked={formData.auto_include_logo}
-                  onChange={(e) => setFormData({ ...formData, auto_include_logo: e.target.checked })}
-                  className="rounded-[1px] bg-[#0c0e12] border-[#232936] text-[#4edea3] focus:ring-0"
-                />
-                AUTO OVERLAY
-              </label>
-            </div>
-
-            {/* Logo Preview & URL */}
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-[2px] bg-[#0c0e12] border border-[#232936] flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                {formData.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={formData.logo_url} alt="Logo" className="w-full h-full object-contain p-1" />
-                ) : (
-                  <Upload className="w-4 h-4 text-[#8f9194]" />
-                )}
+        {/* RIGHT COLUMN: Logo Engine & Tone of Voice */}
+        <div className="flex flex-col gap-8">
+          {/* Logo Engine */}
+          <div className="bg-white rounded-3xl p-6 lg:p-8 border border-[#e0e2e8] shadow-sm space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-['Space_Grotesk'] text-lg font-bold text-[#181c20]">
+                  Logo & Placement
+                </h3>
+                <p className="text-xs text-[#464555]">
+                  Upload your logo and choose where it anchors on generated graphics.
+                </p>
               </div>
-              <div className="flex-1 space-y-1">
+
+              <div>
                 <input
-                  id="input-logo-url"
-                  type="text"
-                  placeholder="https://... logo URL (PNG/SVG)"
-                  value={formData.logo_url || ""}
-                  onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                  className="w-full px-2.5 py-1.5 bg-[#0c0e12] border border-[#232936] rounded-[1px] font-mono text-[10px] text-[#eef1f7] focus:outline-none focus:border-[#333842]"
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  onChange={handleLogoUpload}
+                  className="hidden"
                 />
-                <p className="font-mono text-[8px] text-[#8f9194]">Alpha-channel PNG or SVG recommended</p>
+                <button
+                  type="button"
+                  disabled={isUploadingLogo}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-9 px-4 rounded-full bg-[#5046e5] hover:bg-[#4338ca] text-white font-['Space_Grotesk'] text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{isUploadingLogo ? "Uploading..." : formData.logo_url ? "Replace" : "Upload"}</span>
+                </button>
               </div>
             </div>
 
-            {/* Tactical 4-Quadrant Anchor Rocker */}
-            {formData.auto_include_logo && (
-              <div className="space-y-1.5 pt-1">
-                <span className="font-mono text-[9px] text-[#8f9194] uppercase block">
-                  Anchor Placement Position
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {LOGO_POSITIONS.map((pos) => {
-                    const isSelected = formData.logo_position === pos.key;
-                    return (
-                      <button
-                        key={pos.key}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, logo_position: pos.key })}
-                        className={`px-2.5 py-1.5 rounded-[1px] font-mono text-[9px] uppercase border text-left transition-all flex items-center justify-between ${
-                          isSelected
-                            ? "bg-[#1e2024] text-[#eef1f7] border-[#333842] shadow-sm font-semibold"
-                            : "bg-[#0c0e12] text-[#8f9194] border-[#232936] hover:text-[#c5c6ca]"
-                        }`}
-                      >
-                        <span>{pos.label}</span>
-                        <span className="text-[8px] px-1 bg-[#111317] border border-[#232936]">
-                          {pos.quadrant}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+            {logoUploadError && (
+              <div className="p-3 bg-red-50 text-red-600 rounded-xl text-xs border border-red-200">
+                {logoUploadError}
               </div>
             )}
-          </div>
 
-          {/* Unit 04 // Tone Matrix & Typography Rules */}
-          <div className="bg-[#111317] p-4 rounded-lg border border-[#232936] shadow-sm flex flex-col gap-3 relative">
-            <div className="absolute top-0 inset-x-2 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
-            <div className="flex items-center justify-between pb-1 border-b border-[#232936]/60">
-              <span className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                UNIT 04 // TONE ARRAY & TYPOGRAPHY
-              </span>
+            {/* Interactive Placement Visualizer Canvas */}
+            <div className="relative aspect-[4/3] rounded-2xl bg-gradient-to-tr from-[#181829] to-[#5046e5] p-4 flex flex-col justify-between overflow-hidden shadow-inner">
+              {/* Top Corners */}
+              <div className="flex justify-between items-start z-10">
+                {/* Top Left */}
+                <div className={`transition-all duration-200 ${currentAnchor === "top-left" ? "opacity-100 scale-100" : "opacity-30 scale-90"}`}>
+                  <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-bold text-[#181c20]">
+                    {formData.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={formData.logo_url} alt="Logo" className="w-4 h-4 object-contain" />
+                    ) : (
+                      <div className="w-3.5 h-3.5 rounded-full bg-[#5046e5]" />
+                    )}
+                    <span>{formData.brand_name.toUpperCase()}</span>
+                  </div>
+                </div>
+
+                {/* Top Right */}
+                <div className={`transition-all duration-200 ${currentAnchor === "top-right" ? "opacity-100 scale-100" : "opacity-30 scale-90"}`}>
+                  <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-bold text-[#181c20]">
+                    {formData.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={formData.logo_url} alt="Logo" className="w-4 h-4 object-contain" />
+                    ) : (
+                      <div className="w-3.5 h-3.5 rounded-full bg-[#5046e5]" />
+                    )}
+                    <span>{formData.brand_name.toUpperCase()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Center */}
+              <div className="flex justify-center items-center z-10">
+                <div className={`transition-all duration-200 ${currentAnchor === "center-watermark" ? "opacity-100 scale-100" : "opacity-30 scale-90"}`}>
+                  <div className="flex items-center gap-2 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-bold text-[#181c20] shadow-md">
+                    {formData.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={formData.logo_url} alt="Logo" className="w-5 h-5 object-contain" />
+                    ) : (
+                      <div className="w-4 h-4 rounded-full bg-[#5046e5]" />
+                    )}
+                    <span>{formData.brand_name.toUpperCase()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Corners */}
+              <div className="flex justify-between items-end z-10">
+                {/* Bottom Left */}
+                <div className={`transition-all duration-200 ${currentAnchor === "bottom-left" ? "opacity-100 scale-100" : "opacity-30 scale-90"}`}>
+                  <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-bold text-[#181c20]">
+                    {formData.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={formData.logo_url} alt="Logo" className="w-4 h-4 object-contain" />
+                    ) : (
+                      <div className="w-3.5 h-3.5 rounded-full bg-[#5046e5]" />
+                    )}
+                    <span>{formData.brand_name.toUpperCase()}</span>
+                  </div>
+                </div>
+
+                {/* Bottom Right */}
+                <div className={`transition-all duration-200 ${currentAnchor === "bottom-right" ? "opacity-100 scale-100" : "opacity-30 scale-90"}`}>
+                  <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-bold text-[#181c20]">
+                    {formData.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={formData.logo_url} alt="Logo" className="w-4 h-4 object-contain" />
+                    ) : (
+                      <div className="w-3.5 h-3.5 rounded-full bg-[#5046e5]" />
+                    )}
+                    <span>{formData.brand_name.toUpperCase()}</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Tone Selector Buttons */}
-            <div className="space-y-1">
-              <span className="font-mono text-[9px] text-[#8f9194] uppercase">
-                Dynamic Tone Vectors
+            {/* Position Anchor Buttons */}
+            <div className="space-y-2">
+              <span className="text-xs font-semibold text-[#464555] block">
+                Select Placement Position
               </span>
-              <div className="flex flex-wrap gap-1">
-                {ALL_TONES.map((tone) => {
-                  const isSelected = formData.tone_of_voice.includes(tone);
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {LOGO_POSITIONS.map((pos) => {
+                  const isSelected = currentAnchor === pos.key;
+                  const Icon = pos.icon;
                   return (
                     <button
-                      key={tone}
+                      key={pos.key}
                       type="button"
-                      onClick={() => handleToneToggle(tone)}
-                      className={`px-2.5 py-1 rounded-[1px] font-mono text-[9px] uppercase tracking-wider border transition-all ${
-                        isSelected
-                          ? "bg-[#1e2024] text-[#4edea3] border-[#333842] font-semibold"
-                          : "bg-[#0c0e12] text-[#8f9194] border-[#232936] hover:text-[#c5c6ca]"
-                      }`}
+                      onClick={() => setFormData({ ...formData, logo_position: pos.key })}
+                      className={`h-9 px-2 rounded-full font-['Space_Grotesk'] text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${isSelected
+                          ? "bg-[#5046e5] text-white shadow-sm"
+                          : "bg-[#f1f3f9] text-[#464555] hover:bg-[#e0e2e8] hover:text-[#181c20]"
+                        }`}
                     >
-                      {tone}
+                      <Icon className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{pos.label}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Typography */}
-            <div className="space-y-1 pt-1">
-              <span className="font-mono text-[9px] text-[#8f9194] uppercase">
-                Calibrated Typeface Spec
+            <label className="flex items-center gap-2 cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={formData.auto_include_logo}
+                onChange={(e) => setFormData({ ...formData, auto_include_logo: e.target.checked })}
+                className="w-4 h-4 accent-[#5046e5] rounded cursor-pointer"
+              />
+              <span className="text-xs text-[#181c20] font-medium">
+                Always include logo on generated graphics
               </span>
-              <div className="bg-[#0c0e12] p-1.5 rounded-[1px] border border-[#232936] shadow-inner">
-                <input
-                  type="text"
-                  placeholder="e.g. Geist / JetBrains Mono / Inter"
-                  value={formData.typography || ""}
-                  onChange={(e) => setFormData({ ...formData, typography: e.target.value })}
-                  className="bg-transparent font-mono text-xs text-[#eef1f7] outline-none w-full"
-                />
-              </div>
-            </div>
+            </label>
           </div>
 
-          {/* Unit 05 // Brand Directives & Guidelines Well */}
-          <div className="bg-[#111317] p-4 rounded-lg border border-[#232936] shadow-sm flex flex-col gap-3 relative">
-            <div className="absolute top-0 inset-x-2 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
-            <div className="flex items-center justify-between pb-1 border-b border-[#232936]/60">
-              <span className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                UNIT 05 // GUIDELINES MATRIX
-              </span>
-              {guidelinesParsed && (
-                <span className="font-mono text-[9px] text-[#4edea3] flex items-center gap-1">
-                  <Check className="w-2.5 h-2.5" /> LOCKED
-                </span>
-              )}
+          {/* Tone of Voice */}
+          <div className="bg-white rounded-3xl p-6 lg:p-8 border border-[#e0e2e8] shadow-sm space-y-4">
+            <div>
+              <h3 className="font-['Space_Grotesk'] text-lg font-bold text-[#181c20]">
+                Tone of Voice
+              </h3>
+              <p className="text-xs text-[#464555]">
+                Select traits that describe your brand personality.
+              </p>
             </div>
 
-            <div className="p-3 rounded-[1px] border border-dashed border-[#232936] bg-[#0c0e12] flex flex-col items-center justify-center text-center space-y-1.5">
-              <FileText className="w-5 h-5 text-[#8f9194]" />
-              <div className="font-mono text-[10px] text-[#eef1f7]">
-                {guidelinesFileName || "Drag & Drop Brand Guidelines (PDF/TXT)"}
-              </div>
-              <input
-                type="file"
-                accept=".pdf,.txt"
-                onChange={handleGuidelinesUpload}
-                className="hidden"
-                id="guidelines-file-input"
-              />
-              <label
-                htmlFor="guidelines-file-input"
-                className="px-2.5 py-1 rounded-[1px] bg-[#1e2024] hover:bg-[#282a2e] text-[#eef1f7] font-mono text-[9px] uppercase tracking-wider cursor-pointer border border-[#333842] transition-colors"
-              >
-                {isParsing ? "EXTRACTING DIRECTIVES..." : "UPLOAD DIRECTIVES"}
-              </label>
+            <div className="flex flex-wrap gap-2">
+              {TONE_OPTIONS.map((tone) => {
+                const isSelected = formData.tone_of_voice.includes(tone.key);
+                return (
+                  <button
+                    key={tone.key}
+                    type="button"
+                    onClick={() => handleToneToggle(tone.key)}
+                    className={`inline-flex items-center gap-1.5 h-8 px-4 rounded-full font-['Space_Grotesk'] text-xs font-semibold transition-all cursor-pointer ${isSelected
+                        ? "bg-[#5046e5] text-white shadow-sm"
+                        : "bg-[#f1f3f9] text-[#181c20] hover:bg-[#e0e2e8]"
+                      }`}
+                  >
+                    {isSelected && <Check className="w-3 h-3" />}
+                    <span>{tone.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Eidetic — Precision AI Brand Studio",
-  description: "Tactile Industrial Visual Engine. Generate consistent, brand-calibrated graphics powered by conversational AI.",
+  title: "Eidetic — Modern AI Brand Studio",
+  description: "Brand graphics that look like you made them. Teach Eidetic your colors, type and voice once, then generate posters and social graphics on brand every time.",
 };
 
 export default function RootLayout({
@@ -12,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark h-full">
-      <body className="min-h-full flex flex-col bg-[#0c0e12] text-[#eef1f7] antialiased selection:bg-[#4edea3] selection:text-black font-sans">
+    <html lang="en" className="h-full">
+      <body className="min-h-full flex flex-col bg-[#f7f9ff] text-[#181c20] antialiased selection:bg-[#5046e5] selection:text-white">
         {children}
       </body>
     </html>

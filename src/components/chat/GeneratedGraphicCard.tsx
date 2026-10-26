@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Download, Copy, Check, Eye } from "lucide-react";
+import { Download, Copy, Check, Sliders, ExternalLink } from "lucide-react";
 import { MessageMetadata } from "@/types/database";
 
 interface GeneratedGraphicCardProps {
@@ -12,6 +12,7 @@ interface GeneratedGraphicCardProps {
   brandName?: string;
   assetId?: string | null;
   tenantId?: string;
+  onRefine?: () => void;
 }
 
 function normalizeGraphicUrl(url?: string | null): string {
@@ -29,10 +30,10 @@ export function GeneratedGraphicCard({
   imageUrl,
   metadata,
   brandName = "ACTIVE BRAND",
+  onRefine,
 }: GeneratedGraphicCardProps) {
   const displayUrl = normalizeGraphicUrl(imageUrl);
   const [copied, setCopied] = useState(false);
-  const [showPromptModal, setShowPromptModal] = useState(false);
 
   const handleCopyPrompt = () => {
     if (metadata?.prompt_sent) {
@@ -45,7 +46,7 @@ export function GeneratedGraphicCard({
   const handleDownload = () => {
     const a = document.createElement("a");
     a.href = displayUrl;
-    a.download = `eidetic-${metadata?.format_preset || "spec"}-${Date.now()}.${displayUrl.includes("svg") ? "svg" : "png"}`;
+    a.download = `eidetic-${metadata?.format_preset || "graphic"}-${Date.now()}.${displayUrl.includes("svg") ? "svg" : "png"}`;
     a.target = "_blank";
     document.body.appendChild(a);
     a.click();
@@ -54,111 +55,83 @@ export function GeneratedGraphicCard({
 
   return (
     <div
-      className="mt-2 group relative bg-[#111317] rounded-lg p-2.5 border border-[#232936] shadow-[0_24px_50px_-12px_rgba(0,0,0,0.85),0_2px_4px_rgba(0,0,0,0.5)] transition-all max-w-2xl"
+      className="mt-3 group flex flex-col gap-3 w-full max-w-xl"
       id="generated-graphic-card"
     >
-      {/* Top Specular Edge */}
-      <div className="absolute top-0 left-2 right-2 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
+      {/* Poster Preview Container */}
+      <div className="relative w-full rounded-3xl overflow-hidden bg-white shadow-[0_16px_40px_-8px_rgba(80,70,229,0.18)] border border-[#e0e2e8] flex flex-col justify-between transition-all duration-300 group-hover:shadow-[0_20px_48px_-6px_rgba(80,70,229,0.25)]">
+        {/* Graphic Image Area */}
+        <div className="relative w-full bg-[#f1f3f9] overflow-hidden flex items-center justify-center min-h-[340px]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={displayUrl}
+            alt="Brand graphic render"
+            className="w-full h-auto object-cover max-h-[580px] transition-transform duration-500 group-hover:scale-[1.01]"
+          />
 
-      {/* Titanium Corner Registration Crop Marks (+) */}
-      <div className="absolute top-4 left-4 z-30 pointer-events-none text-[#eef1f7] font-mono text-[11px] opacity-75 drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">
-        +
-      </div>
-      <div className="absolute top-4 right-4 z-30 pointer-events-none text-[#eef1f7] font-mono text-[11px] opacity-75 drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">
-        +
-      </div>
-      <div className="absolute bottom-11 left-4 z-30 pointer-events-none text-[#eef1f7] font-mono text-[11px] opacity-75 drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">
-        +
-      </div>
-      <div className="absolute bottom-11 right-4 z-30 pointer-events-none text-[#eef1f7] font-mono text-[11px] opacity-75 drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">
-        +
-      </div>
-
-      {/* Visual Viewport Well */}
-      <div className="relative w-full bg-[#0c0e12] overflow-hidden rounded-[2px] shadow-[inset_0_2px_6px_rgba(0,0,0,0.8)] border border-black/40 min-h-[300px] flex items-center justify-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={displayUrl}
-          alt="Brand graphic render"
-          className="w-full h-auto object-cover max-h-[540px] filter contrast-[1.03] transition-transform duration-500 group-hover:scale-[1.01]"
-        />
-
-        {/* Floating Spec Tag */}
-        <div className="absolute top-3 left-7 flex items-center gap-2 pointer-events-none">
-          <div className="px-2 py-0.5 rounded-[1px] bg-[#0c0e12]/90 backdrop-blur-md border border-[#232936] text-[10px] font-mono text-[#eef1f7] flex items-center gap-1.5 shadow-md">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#4edea3] shadow-[0_0_4px_rgba(78,222,163,0.9)]" />
-            <span>{metadata?.format_preset?.toUpperCase() || "FORMAT 1:1"}</span>
-            <span className="text-[#8f9194]">({metadata?.aspect_ratio || "1:1"})</span>
+          {/* Floating Pill Badges */}
+          <div className="absolute top-4 left-4 flex items-center gap-2 pointer-events-none z-10">
+            <span className="font-headline font-bold text-xs uppercase tracking-wider bg-white/95 backdrop-blur-md px-3.5 py-1 rounded-full text-[#181c20] shadow-md border border-[#e0e2e8]">
+              {brandName}
+            </span>
+            <span className="font-mono text-xs bg-[#5046e5] text-white px-3 py-1 rounded-full shadow-md font-semibold">
+              {metadata?.format_preset?.toUpperCase() || "4:5 POSTER"}
+            </span>
           </div>
-          <span className="px-2 py-0.5 rounded-[1px] bg-[#111317]/80 backdrop-blur-md border border-[#232936] text-[9px] font-mono text-[#c5c6ca]">
-            {brandName.toUpperCase()}
+
+          <div className="absolute top-4 right-4 pointer-events-none z-10">
+            <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-3 py-1 rounded-full text-[#181c20] font-mono text-xs shadow-md border border-[#e0e2e8]">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>300 DPI</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Tray */}
+      <div className="flex items-center justify-between px-2">
+        <div className="flex items-center gap-2">
+          <span className="font-['Space_Grotesk'] font-bold text-xs text-[#181c20]">
+            {metadata?.format_preset?.replace("_", " ").toUpperCase() || "GRAPHIC"}
+          </span>
+          <span className="text-[11px] text-[#777587] font-mono">
+            {metadata?.aspect_ratio ? `(${metadata.aspect_ratio})` : ""}
           </span>
         </div>
 
-        {/* Hover Instrument Keys (Tactile Floating Actions) */}
-        <div className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-2 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-40 px-4">
-          {/* Download Raw Action */}
+        <div className="flex items-center gap-2">
+          {onRefine && (
+            <button
+              type="button"
+              onClick={onRefine}
+              className="h-9 px-4 rounded-full bg-[#5046e5] hover:bg-[#4338ca] text-white font-headline text-xs font-semibold transition-all shadow-[0_4px_14px_rgba(80,70,229,0.2)] flex items-center gap-1.5 cursor-pointer"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Refine</span>
+            </button>
+          )}
+
           <button
-            id="download-graphic-btn"
             type="button"
             onClick={handleDownload}
-            className="h-8 px-3.5 bg-[#1e2024]/95 hover:bg-[#282a2e] text-[#eef1f7] border border-[#333842] rounded-[2px] font-mono text-[10px] tracking-wider uppercase flex items-center gap-1.5 shadow-[0_4px_12px_rgba(0,0,0,0.7)] active:translate-y-[1px] transition-all"
+            className="h-9 px-4 rounded-full bg-white hover:bg-[#f1f3f9] text-[#181c20] font-headline text-xs font-semibold transition-all border border-[#e0e2e8] shadow-sm flex items-center gap-1.5 cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5 text-[#4edea3]" />
-            <span className="font-semibold">DOWNLOAD RAW</span>
+            <Download className="w-3.5 h-3.5 text-[#5046e5]" />
+            <span>Download</span>
           </button>
 
           {metadata?.prompt_sent && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowPromptModal(!showPromptModal)}
-                className="h-8 px-3 bg-[#1e2024]/95 hover:bg-[#282a2e] text-[#c5c6ca] hover:text-[#eef1f7] border border-[#333842] rounded-[2px] font-mono text-[10px] tracking-wider uppercase flex items-center gap-1.5 shadow-[0_4px_12px_rgba(0,0,0,0.7)] active:translate-y-[1px] transition-all"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>SPEC PROMPT</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleCopyPrompt}
-                className="h-8 px-3 bg-[#1e2024]/95 hover:bg-[#282a2e] text-[#c5c6ca] hover:text-[#eef1f7] border border-[#333842] rounded-[2px] font-mono text-[10px] tracking-wider uppercase flex items-center gap-1.5 shadow-[0_4px_12px_rgba(0,0,0,0.7)] active:translate-y-[1px] transition-all"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-[#4edea3]" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? "COPIED" : "COPY"}</span>
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={handleCopyPrompt}
+              className="w-9 h-9 rounded-full bg-white hover:bg-[#f1f3f9] text-[#464555] hover:text-[#181c20] flex items-center justify-center border border-[#e0e2e8] transition-all shadow-sm"
+              title="Copy generation prompt"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
           )}
         </div>
       </div>
-
-      {/* Milled Base Telemetry Carrier Strip */}
-      <div className="mt-2.5 px-2.5 py-1.5 flex items-center justify-between bg-[#0c0e12]/80 border border-[#232936] rounded-[2px] shadow-[inset_0_1px_3px_rgba(0,0,0,0.7)]">
-        <div className="flex items-center gap-3 font-mono text-[10px] text-[#8f9194] tracking-wider">
-          <span>APERTURE: <span className="text-[#eef1f7]">RAW_01</span></span>
-          <span className="text-[#333842]">•</span>
-          <span>FORMAT: <span className="text-[#eef1f7]">{metadata?.aspect_ratio || "1:1"}</span></span>
-          <span className="text-[#333842]">•</span>
-          <span>STATUS: <span className="text-[#4edea3]">SYNTHESIZED</span></span>
-        </div>
-        <div className="flex items-center gap-1.5 bg-[#111317] px-2 py-0.5 rounded-[1px] border border-[#232936]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#4edea3] shadow-[0_0_4px_rgba(78,222,163,0.8)]" />
-          <span className="font-mono text-[10px] text-[#4edea3] font-semibold tracking-wider">
-            BRAND DNA: 100%
-          </span>
-        </div>
-      </div>
-
-      {/* Expanded Prompt Snapshot */}
-      {showPromptModal && metadata?.prompt_sent && (
-        <div className="mt-2 p-3 bg-[#0c0e12] border border-[#232936] rounded-[2px] font-mono text-[10px] text-[#c5c6ca] space-y-1.5 animate-fadeIn">
-          <div className="font-semibold text-[#8f9194] uppercase tracking-wider">
-            SYNTHESIZED PROMPT MATRIX
-          </div>
-          <p className="bg-[#111317] p-2.5 rounded-[1px] border border-[#232936] leading-relaxed whitespace-pre-wrap text-[#eef1f7]">
-            {metadata.prompt_sent}
-          </p>
-        </div>
-      )}
     </div>
   );
 }

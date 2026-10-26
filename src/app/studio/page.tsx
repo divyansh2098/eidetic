@@ -4,12 +4,10 @@ import React, { useState, useRef, useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { FormatPresetsBar } from "@/components/chat/FormatPresetsBar";
 import { GeneratedGraphicCard } from "@/components/chat/GeneratedGraphicCard";
-import { LimitCard } from "@/components/chat/LimitCard";
 import { AssetGallery } from "@/components/assets/AssetGallery";
 import { BrandProfileView } from "@/components/brand/BrandProfileView";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { BrandOnboardingModal } from "@/components/brand/BrandOnboardingModal";
-import { UpgradeModal } from "@/components/settings/UpgradeModal";
 import {
   getBrandProfiles,
   saveBrandProfile,
@@ -29,26 +27,23 @@ import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import { generateUUID } from "@/lib/utils/uuid";
 import {
   RotateCcw,
-  Bot,
-  User,
   ArrowUpRight,
   X,
   Code2,
-  CheckCircle2,
   Plus,
-  AlertCircle,
-  Layers,
   Sparkles,
   Sliders,
-  Crop,
-  Terminal,
+  Paintbrush,
+  ChevronLeft,
+  ChevronRight,
+  ImagePlus,
 } from "lucide-react";
 
 const PROMPT_SUGGESTIONS = [
-  "Brushed titanium monolith on volcanic basalt pedestal, surgical strobe lighting",
-  "Minimalist architectural glass pavilion with raw concrete geometry",
-  "Matte dark luxury watch showcase with emerald optic reflection",
-  "Clean industrial product packaging with embossed metallic typography",
+  "Modern product launch announcement with bold typography and brand colors",
+  "Clean minimalist event poster with geometric balance and brand logo",
+  "Editorial feature graphic with elegant typography",
+  "Seasonal promotion banner tailored to active brand palette",
 ];
 
 export default function StudioPage() {
@@ -65,16 +60,70 @@ export default function StudioPage() {
   const [inputPrompt, setInputPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [usageCount, setUsageCount] = useState(0);
-  const [usageLimit] = useState(200);
-  const [canvaConnected, setCanvaConnected] = useState(false);
-  const [showCanvaModal, setShowCanvaModal] = useState(false);
   const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [currentPlan, setCurrentPlan] = useState("pro");
 
+  const [attachedImages, setAttachedImages] = useState<
+    Array<{ data: string; mimeType: string; name: string }>
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const suggestionsScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollSuggestionsLeft, setCanScrollSuggestionsLeft] = useState(false);
+  const [canScrollSuggestionsRight, setCanScrollSuggestionsRight] = useState(false);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith("image/")) return;
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        const result = uploadEvent.target?.result as string;
+        if (result) {
+          setAttachedImages((prev) => [
+            ...prev,
+            {
+              data: result,
+              mimeType: file.type || "image/png",
+              name: file.name,
+            },
+          ]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveAttachment = (indexToRemove: number) => {
+    setAttachedImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  const checkSuggestionsScroll = () => {
+    const el = suggestionsScrollRef.current;
+    if (!el) return;
+    setCanScrollSuggestionsLeft(el.scrollLeft > 2);
+    setCanScrollSuggestionsRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  };
+
+  useEffect(() => {
+    checkSuggestionsScroll();
+    window.addEventListener("resize", checkSuggestionsScroll);
+    return () => window.removeEventListener("resize", checkSuggestionsScroll);
+  }, []);
+
+  const handleScrollSuggestions = (direction: "left" | "right") => {
+    const el = suggestionsScrollRef.current;
+    if (!el) return;
+    const scrollAmount = direction === "left" ? -220 : 220;
+    el.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    setTimeout(checkSuggestionsScroll, 300);
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -122,7 +171,7 @@ export default function StudioPage() {
                 tenant_id: brandToUse.tenant_id,
                 brand_profile_id: brandToUse.id,
                 role: "assistant",
-                content: `Calibrated workspace ready for **${brandToUse.brand_name}**. Direct visual composition or choose an optical format preset below.`,
+                content: `Workspace ready for **${brandToUse.brand_name}**. Enter a prompt or select a preset to generate brand-aligned graphics.`,
                 image_url: null,
                 asset_id: null,
                 metadata: null,
@@ -155,20 +204,14 @@ export default function StudioPage() {
   useEffect(() => {
     try {
       localStorage.setItem("eidetic_brands", JSON.stringify(brands));
-    } catch { }
+    } catch {}
   }, [brands]);
 
   useEffect(() => {
     try {
       localStorage.setItem("eidetic_assets", JSON.stringify(assets));
-    } catch { }
+    } catch {}
   }, [assets]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("eidetic_canva", JSON.stringify(canvaConnected));
-    } catch { }
-  }, [canvaConnected]);
 
   useEffect(() => {
     if (currentTab === "chat") {
@@ -178,210 +221,166 @@ export default function StudioPage() {
 
   const handleSendMessage = async (customPrompt?: string) => {
     const promptToSend = (customPrompt || inputPrompt).trim();
-    if (!promptToSend || isGenerating) return;
+    if ((!promptToSend && attachedImages.length === 0) || isGenerating) return;
 
     if (!activeBrand) {
-      alert("Please select or calibrate a brand specification first.");
+      setShowOnboardingModal(true);
       return;
     }
 
-    // Check quota hard block
-    if (usageCount >= usageLimit) {
-      alert("Monthly limit reached. Please upgrade to continue generating graphics.");
-      return;
-    }
+    const currentConv = conversations.find((c) => c.id === activeConversationId);
+    let convId = activeConversationId;
+    const targetTenantId = activeBrand.tenant_id || tenantId || generateUUID();
+    const resolvedPrompt = promptToSend || "Generate graphic incorporating reference image";
 
-    const currentTenantId = activeBrand.tenant_id || tenantId || generateUUID();
-    let currentSessionId = activeConversationId;
-
-    // Auto-create session if none active
-    if (!currentSessionId) {
-      currentSessionId = generateUUID();
-      const cleanPrompt = promptToSend.replace(/^["'\s]+|["'\s]+$/g, "");
-      const newTitle = cleanPrompt.length > 34 ? `${cleanPrompt.slice(0, 31)}...` : cleanPrompt || "Buffer #01";
-      const presetConfig = getPresetByKey(selectedPreset);
+    if (!currentConv) {
+      convId = generateUUID();
       const newSession: Conversation = {
-        id: currentSessionId,
-        tenant_id: currentTenantId,
+        id: convId,
+        tenant_id: targetTenantId,
         brand_profile_id: activeBrand.id,
-        title: newTitle,
+        title: resolvedPrompt.slice(0, 28) + (resolvedPrompt.length > 28 ? "..." : ""),
         format_preset: selectedPreset,
-        aspect_ratio: (selectedPreset === "custom" && customRatio ? customRatio : presetConfig?.aspectRatio || "1:1") as AspectRatio,
+        aspect_ratio: selectedPreset === "custom" ? "custom" : getPresetByKey(selectedPreset).aspectRatio,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       setConversations((prev) => [newSession, ...prev]);
-      setActiveConversationId(currentSessionId);
-      saveChatSession(newSession).catch((err) =>
-        console.warn("Failed to create session on first message:", err)
-      );
+      setActiveConversationId(convId);
+      saveChatSession(newSession).catch(console.warn);
     }
 
-    const userMessageId = generateUUID();
-    const newUserMessage: Message = {
-      id: userMessageId,
-      conversation_id: currentSessionId,
-      tenant_id: currentTenantId,
+    const targetPreset = getPresetByKey(selectedPreset);
+    const resolvedAspectRatio: AspectRatio =
+      selectedPreset === "custom" ? "custom" : targetPreset.aspectRatio;
+
+    const imagesToAttach = [...attachedImages];
+    const userMessage: Message = {
+      id: generateUUID(),
+      conversation_id: convId,
+      tenant_id: targetTenantId,
       brand_profile_id: activeBrand.id,
       role: "user",
-      content: promptToSend,
+      content: resolvedPrompt,
       image_url: null,
       asset_id: null,
       metadata: {
         format_preset: selectedPreset,
-        aspect_ratio: selectedPreset === "custom" ? "custom" : undefined,
+        aspect_ratio: resolvedAspectRatio,
+        attachments: imagesToAttach,
       },
       created_at: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, newUserMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInputPrompt("");
+    setAttachedImages([]);
     setIsGenerating(true);
 
-    // Dynamically rename buffer if still default
-    const currentConv = conversations.find((c) => c.id === currentSessionId);
-    if (
-      currentConv &&
-      (currentConv.title.startsWith("Campaign Session #") ||
-        currentConv.title.startsWith("New Campaign Session") ||
-        currentConv.title.startsWith("Buffer #") ||
-        currentConv.title === "New Session")
-    ) {
-      const cleanPrompt = promptToSend.replace(/^["'\s]+|["'\s]+$/g, "");
-      const newTitle = cleanPrompt.length > 34 ? `${cleanPrompt.slice(0, 31)}...` : cleanPrompt;
-      const updatedConv: Conversation = {
-        ...currentConv,
-        title: newTitle,
-        updated_at: new Date().toISOString(),
-      };
-      setConversations((prev) =>
-        prev.map((c) => (c.id === currentSessionId ? updatedConv : c))
-      );
-      saveChatSession(updatedConv).catch((err) =>
-        console.warn("Failed to update conversation title:", err)
-      );
-    }
-
-    // Persist user message
-    saveMessage(newUserMessage).catch((err) => console.warn("saveMessage user error:", err));
+    saveMessage(userMessage).catch(console.warn);
 
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: promptToSend,
           brandProfile: activeBrand,
+          prompt: resolvedPrompt,
+          userPrompt: resolvedPrompt,
           formatPreset: selectedPreset,
           customRatio: selectedPreset === "custom" ? customRatio : undefined,
-          sessionId: currentSessionId,
-          messageId: userMessageId,
+          sessionId: convId,
+          attachments: imagesToAttach,
+          messages: [...messages, userMessage],
         }),
       });
 
-      let data: any = null;
-      try {
-        data = await response.json();
-      } catch (jsonErr) {
-        data = { error: `Server error (${response.status}): ${response.statusText || "Generation failed"}` };
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Generation request failed.");
       }
 
-      if (response.ok && data?.success) {
-        const assistantMessageId = generateUUID();
-        const newAssetId = data.assetId || generateUUID();
-        const safeTenantId = currentTenantId;
-        const safeBrandId = activeBrand.id;
-        const presetConfig = getPresetByKey(selectedPreset);
+      const assistantMessage: Message = {
+        id: generateUUID(),
+        conversation_id: convId,
+        tenant_id: targetTenantId,
+        brand_profile_id: activeBrand.id,
+        role: "assistant",
+        content: data.text || "Your graphic has been generated based on your brand identity.",
+        image_url: data.imageUrl,
+        asset_id: data.assetId || null,
+        metadata: {
+          format_preset: selectedPreset,
+          aspect_ratio: resolvedAspectRatio,
+          prompt_sent: data.metadata?.prompt_sent || data.imagePrompt || resolvedPrompt,
+          width: targetPreset.width,
+          height: targetPreset.height,
+        },
+        created_at: new Date().toISOString(),
+      };
 
-        const newAssistantMessage: Message = {
-          id: assistantMessageId,
-          conversation_id: currentSessionId,
-          tenant_id: safeTenantId,
-          brand_profile_id: safeBrandId,
-          role: "assistant",
-          content: data.chatResponse,
-          image_url: data.imageUrl || null,
-          asset_id: data.assetId || null,
-          metadata: data.metadata,
-          created_at: new Date().toISOString(),
-        };
+      setMessages((prev) => [...prev, assistantMessage]);
+      saveMessage(assistantMessage).catch(console.warn);
 
-        setMessages((prev) => [...prev, newAssistantMessage]);
-        saveMessage(newAssistantMessage).catch((err) => console.warn("saveMessage assistant error:", err));
-
-        if (data.imageUrl) {
-          const newAsset: Asset = {
-            id: newAssetId,
-            tenant_id: safeTenantId,
-            brand_profile_id: safeBrandId,
-            message_id: assistantMessageId,
-            storage_path: data.storagePath || `${safeTenantId}/${newAssetId}.${data.format || "png"}`,
-            public_url: data.imageUrl,
-            format: (data.format || "png") as "png" | "jpg" | "webp",
-            width: presetConfig?.width || 1080,
-            height: presetConfig?.height || 1080,
-            aspect_ratio: (data.metadata?.aspect_ratio || presetConfig?.aspectRatio || "1:1") as AspectRatio,
-            format_preset: selectedPreset,
-            canva_design_id: null,
-            canva_edit_url: null,
-            canva_pushed_at: null,
-            created_at: new Date().toISOString(),
-          };
-
-          setAssets((prev) => [newAsset, ...prev]);
-          setUsageCount((prev) => prev + 1);
-
-          saveAsset(newAsset, { sessionId: currentSessionId }).catch((err) =>
-            console.warn("saveAsset background error:", err)
-          );
-        }
-      } else {
-        const errorDetail = data?.error || `Optical render failed (${response.status})`;
-        const errorContent = data?.chatResponse
-          ? `${data.chatResponse}\n\n⚠️ **Optical Synthesis Failed**\n${errorDetail}`
-          : `⚠️ **Optical Synthesis Failed**\n\n${errorDetail}\n\nPlease check prompt or parameters and retry.`;
-
-        const errorMessage: Message = {
-          id: generateUUID(),
-          conversation_id: currentSessionId,
-          tenant_id: currentTenantId,
+      if (data.imageUrl) {
+        const newAsset: Asset = {
+          id: data.assetId || generateUUID(),
+          tenant_id: targetTenantId,
           brand_profile_id: activeBrand.id,
-          role: "assistant",
-          content: errorContent,
-          image_url: null,
-          asset_id: null,
-          metadata: {
-            error: errorDetail,
-            format_preset: selectedPreset,
-          },
+          message_id: assistantMessage.id,
+          format_preset: selectedPreset,
+          aspect_ratio: resolvedAspectRatio,
+          public_url: data.imageUrl,
+          storage_path: data.storagePath || "",
+          format: "png",
+          width: targetPreset.width,
+          height: targetPreset.height,
+          canva_design_id: null,
+          canva_edit_url: null,
+          canva_pushed_at: null,
           created_at: new Date().toISOString(),
         };
-
-        setMessages((prev) => [...prev, errorMessage]);
-        saveMessage(errorMessage).catch((e) => console.warn("saveMessage error message failed:", e));
+        setAssets((prev) => [newAsset, ...prev]);
+        saveAsset(newAsset).catch(console.warn);
       }
     } catch (err: any) {
-      console.error("[StudioPage] handleSendMessage error:", err);
-      if (activeBrand) {
-        const errorMessage: Message = {
-          id: generateUUID(),
-          conversation_id: currentSessionId,
-          tenant_id: currentTenantId,
-          brand_profile_id: activeBrand.id,
-          role: "assistant",
-          content: `⚠️ **Optical Synthesis Failed**\n\n${err.message || "Failed to communicate with optical render engine."}`,
-          image_url: null,
-          asset_id: null,
-          metadata: {
-            error: err.message,
-          },
-          created_at: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, errorMessage]);
-        saveMessage(errorMessage).catch((e) => console.warn("saveMessage error message failed:", e));
-      }
+      console.error("Generation error:", err);
+      const errorMessage: Message = {
+        id: generateUUID(),
+        conversation_id: convId,
+        tenant_id: targetTenantId,
+        brand_profile_id: activeBrand.id,
+        role: "assistant",
+        content: `Generation failed: ${err.message || "An unexpected error occurred. Please try again."}`,
+        image_url: null,
+        asset_id: null,
+        metadata: { error: err.message || "Failed" },
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+      saveMessage(errorMessage).catch(console.warn);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleSelectPreset = (preset: FormatPreset, custom?: string) => {
+    setSelectedPreset(preset);
+    if (custom) {
+      setCustomRatio(custom);
+    }
+  };
+
+  const handleSelectBrand = (brand: BrandProfile) => {
+    setActiveBrand(brand);
+    const brandSessions = conversations.filter((c) => c.brand_profile_id === brand.id);
+    if (brandSessions.length > 0) {
+      setActiveConversationId(brandSessions[0].id);
+      getMessages(brandSessions[0].id).then(setMessages).catch(console.warn);
+    } else {
+      setActiveConversationId("");
+      setMessages([]);
     }
   };
 
@@ -389,93 +388,32 @@ export default function StudioPage() {
     setShowOnboardingModal(true);
   };
 
-  const handleOnboardingComplete = async (newBrand: BrandProfile) => {
-    const saved = await saveBrandProfile(newBrand);
-    setBrands((prev) => [saved, ...prev.filter((b) => b.id !== saved.id)]);
-    setActiveBrand(saved);
-    if (saved.tenant_id && !tenantId) {
-      setTenantId(saved.tenant_id);
+  const handleOnboardingComplete = async (brandData: any) => {
+    const targetTenantId = brandData.tenant_id || tenantId || generateUUID();
+    const newProfile: BrandProfile = {
+      ...brandData,
+      id: generateUUID(),
+      tenant_id: targetTenantId,
+    };
+
+    setBrands((prev) => [...prev, newProfile]);
+    setActiveBrand(newProfile);
+    setShowOnboardingModal(false);
+
+    try {
+      await saveBrandProfile(newProfile);
+    } catch (e) {
+      console.warn("Failed to persist brand profile to Supabase:", e);
     }
-    await handleSelectBrand(saved);
-    setCurrentTab("chat");
   };
 
   const handleUpdateBrand = async (updated: BrandProfile) => {
+    setActiveBrand(updated);
+    setBrands((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
     try {
-      const saved = await saveBrandProfile(updated);
-      setBrands((prev) => prev.map((b) => (b.id === saved.id ? saved : b)));
-      setActiveBrand(saved);
-    } catch (err: any) {
-      console.error("updateBrandProfile error:", err);
-      alert(`Failed to update brand profile: ${err.message || err}`);
-    }
-  };
-
-  const handleSelectBrand = async (brand: BrandProfile) => {
-    setActiveBrand(brand);
-    try {
-      const targetTenantId = brand.tenant_id || tenantId || generateUUID();
-      const brandSessions = await getChatSessions(targetTenantId, brand.id);
-      if (brandSessions.length > 0) {
-        setConversations(brandSessions);
-        const activeId = brandSessions[0].id;
-        setActiveConversationId(activeId);
-        const msgs = await getMessages(activeId);
-        setMessages(msgs);
-      } else {
-        const newId = generateUUID();
-        const initialConv: Conversation = {
-          id: newId,
-          tenant_id: targetTenantId,
-          brand_profile_id: brand.id,
-          title: `${brand.brand_name} Initial Buffer`,
-          format_preset: "instagram_post",
-          aspect_ratio: "1:1",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        const welcomeMsg: Message = {
-          id: generateUUID(),
-          conversation_id: newId,
-          tenant_id: targetTenantId,
-          brand_profile_id: brand.id,
-          role: "assistant",
-          content: `Calibrated workspace ready for **${brand.brand_name}**. Direct visual composition or choose an optical format preset below.`,
-          image_url: null,
-          asset_id: null,
-          metadata: null,
-          created_at: new Date().toISOString(),
-        };
-        setConversations([initialConv]);
-        setActiveConversationId(newId);
-        setMessages([welcomeMsg]);
-        saveChatSession(initialConv).catch(console.warn);
-        saveMessage(welcomeMsg).catch(console.warn);
-      }
+      await saveBrandProfile(updated);
     } catch (e) {
-      console.warn("Failed to load sessions for brand:", e);
-    }
-  };
-
-  const handleSelectPreset = (preset: FormatPreset, ratio?: string) => {
-    setSelectedPreset(preset);
-    if (ratio) setCustomRatio(ratio);
-
-    const currentConv = conversations.find((c) => c.id === activeConversationId);
-    if (currentConv) {
-      const presetConfig = getPresetByKey(preset);
-      const updatedConv: Conversation = {
-        ...currentConv,
-        format_preset: preset,
-        aspect_ratio: (ratio as AspectRatio) || presetConfig?.aspectRatio || currentConv.aspect_ratio || "1:1",
-        updated_at: new Date().toISOString(),
-      };
-      setConversations((prev) =>
-        prev.map((c) => (c.id === activeConversationId ? updatedConv : c))
-      );
-      saveChatSession(updatedConv).catch((err) =>
-        console.warn("Failed to persist conversation preset:", err)
-      );
+      console.warn("Failed to update brand profile:", e);
     }
   };
 
@@ -484,9 +422,9 @@ export default function StudioPage() {
     const conv = conversations.find((c) => c.id === convId);
     if (conv?.format_preset) {
       setSelectedPreset(conv.format_preset as FormatPreset);
-      if (conv.aspect_ratio && !["1:1", "16:9", "9:16"].includes(conv.aspect_ratio)) {
-        setCustomRatio(conv.aspect_ratio);
-      }
+    }
+    if (conv?.aspect_ratio && !["1:1", "16:9", "9:16"].includes(conv.aspect_ratio)) {
+      setCustomRatio(conv.aspect_ratio);
     }
 
     try {
@@ -501,8 +439,8 @@ export default function StudioPage() {
           brand_profile_id: conv?.brand_profile_id || activeBrand?.id || "",
           role: "assistant",
           content: activeBrand
-            ? `Buffer **${conv?.title || "Buffer"}** loaded for **${activeBrand.brand_name}**. Direct visual specification below.`
-            : `Buffer active. Direct visual specification below.`,
+            ? `Workspace ready for **${activeBrand.brand_name}**. Direct your prompt below.`
+            : `Workspace active. Enter a prompt below.`,
           image_url: null,
           asset_id: null,
           metadata: null,
@@ -537,7 +475,7 @@ export default function StudioPage() {
 
   const handleResetConversation = async () => {
     if (!activeBrand) return;
-    if (!confirm("Are you sure you want to reset this buffer session?")) return;
+    if (!confirm("Are you sure you want to clear this session's history?")) return;
     const targetTenantId = activeBrand.tenant_id || tenantId || generateUUID();
     const welcomeMsg: Message = {
       id: generateUUID(),
@@ -545,7 +483,7 @@ export default function StudioPage() {
       tenant_id: targetTenantId,
       brand_profile_id: activeBrand.id,
       role: "assistant",
-      content: `Buffer cleared. Calibration parameters for **${activeBrand.brand_name}** locked. Ready for input.`,
+      content: `Session cleared for **${activeBrand.brand_name}**. Ready for input.`,
       image_url: null,
       asset_id: null,
       metadata: null,
@@ -574,7 +512,7 @@ export default function StudioPage() {
       id: newId,
       tenant_id: targetTenantId,
       brand_profile_id: activeBrand.id,
-      title: `Buffer #${conversations.length + 1}`,
+      title: `Graphic #${conversations.length + 1}`,
       format_preset: selectedPreset,
       aspect_ratio: "1:1",
       created_at: new Date().toISOString(),
@@ -590,7 +528,7 @@ export default function StudioPage() {
       tenant_id: targetTenantId,
       brand_profile_id: activeBrand.id,
       role: "assistant",
-      content: `Allocated buffer for **${activeBrand.brand_name}**. Select format preset or direct specification.`,
+      content: `New session created for **${activeBrand.brand_name}**. Select a format preset or describe your graphic.`,
       image_url: null,
       asset_id: null,
       metadata: null,
@@ -632,10 +570,10 @@ export default function StudioPage() {
     setAssets((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const currentConvTitle = conversations.find((c) => c.id === activeConversationId)?.title || "STANDBY BUFFER";
+  const currentConvTitle = conversations.find((c) => c.id === activeConversationId)?.title || "Studio Canvas";
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0c0e12] text-[#eef1f7]">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#f7f9ff] text-[#181c20]">
       {/* Left Sidebar */}
       <Sidebar
         currentTab={currentTab}
@@ -644,10 +582,6 @@ export default function StudioPage() {
         activeBrand={activeBrand}
         onSelectBrand={handleSelectBrand}
         onAddNewBrand={handleAddNewBrand}
-        usageCount={usageCount}
-        usageLimit={usageLimit}
-        canvaConnected={canvaConnected}
-        onOpenUpgrade={() => setShowUpgradeModal(true)}
         conversations={activeBrand ? conversations.filter((c) => c.brand_profile_id === activeBrand.id) : []}
         activeConversationId={activeConversationId}
         onSelectConversation={handleSelectConversation}
@@ -657,82 +591,45 @@ export default function StudioPage() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#0c0e12] relative">
-        {/* TOP HARDWARE RAIL (Header) */}
-        <header className="h-12 border-b border-[#232936] px-4 flex items-center justify-between shrink-0 bg-[#0c0e12]/95 backdrop-blur-md z-30 shadow-[0_1px_4px_rgba(0,0,0,0.6)]">
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#f7f9ff] relative">
+        {/* SUB-HEADER CANVAS NAVIGATION STRIP */}
+        <header className="h-14 border-b border-[#e0e2e8] px-6 flex items-center justify-between shrink-0 bg-white/90 backdrop-blur-md z-30 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs tracking-[0.25em] text-[#eef1f7] font-semibold uppercase select-none">
-                EIDETIC
-              </span>
-              <div className="w-1.5 h-1.5 rounded-full bg-[#4edea3] shadow-[0_0_6px_rgba(78,222,163,0.9)]" />
-            </div>
+            <h1 className="font-['Space_Grotesk'] font-bold text-base text-[#181c20] tracking-tight">
+              {currentConvTitle}
+            </h1>
 
-            <div className="h-3 w-[1px] bg-[#232936] mx-1" />
+            <span className="px-2.5 py-0.5 rounded-full bg-[#e2dfff] text-[#3422cc] font-mono text-[11px] font-semibold">
+              {selectedPreset.replace("_", " ").toUpperCase()}
+            </span>
 
-            {/* Spec Pill */}
-            {activeBrand ? (
-              <div className="flex items-center gap-1.5 bg-[#111317] border border-[#232936] rounded-[2px] px-2 py-0.5">
-                <span className="font-mono text-[9px] text-[#8f9194] uppercase tracking-wider">
-                  SPEC:
-                </span>
-                <span className="font-mono text-[10px] text-[#eef1f7] font-medium tracking-tight">
-                  {activeBrand.brand_name.toUpperCase()}
-                </span>
-                <div className="flex items-center gap-1 ml-1">
-                  <div
-                    className="w-2 h-2 rounded-[1px] border border-black/40"
-                    style={{ backgroundColor: activeBrand.primary_colour }}
-                  />
-                  {activeBrand.secondary_colours?.[0] && (
-                    <div
-                      className="w-2 h-2 rounded-[1px] border border-black/40"
-                      style={{ backgroundColor: activeBrand.secondary_colours[0] }}
-                    />
-                  )}
-                </div>
+            {activeBrand && (
+              <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f1f3f9] text-[#181c20] font-mono text-[11px] border border-[#e0e2e8]">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>{activeBrand.brand_name}</span>
               </div>
-            ) : (
-              <span className="font-mono text-[10px] text-[#8f9194]">
-                [ NO SPEC LOADED ]
-              </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Canva Link Action */}
-            <button
-              id="canva-status-header-btn"
-              type="button"
-              onClick={() => setShowCanvaModal(true)}
-              className="h-7 px-2.5 flex items-center gap-1.5 bg-[#16181d] border border-[#232936] hover:border-[#333842] rounded-[2px] text-[#8f9194] hover:text-[#eef1f7] transition-all font-mono text-[9px] uppercase tracking-wider active:translate-y-[1px]"
-            >
-              <Layers className="w-3 h-3 text-cyan-400" />
-              <span>CANVA</span>
-              <span className="text-[8px] px-1 py-0.2 rounded-[1px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/20">
-                LINK
-              </span>
-            </button>
-
-            {/* Prompt DNA Inspector */}
+          <div className="flex items-center gap-2.5">
+            {/* Prompt Spec */}
             <button
               type="button"
               disabled={!activeBrand}
               onClick={() => setShowSystemPromptModal(true)}
-              className="h-7 px-2.5 flex items-center gap-1.5 bg-[#16181d] border border-[#232936] hover:border-[#333842] disabled:opacity-40 rounded-[2px] text-[#8f9194] hover:text-[#eef1f7] transition-all font-mono text-[9px] uppercase tracking-wider active:translate-y-[1px]"
-              title="Inspect 5-layer prompt DNA"
+              className="h-8 px-3 flex items-center gap-1.5 bg-[#f1f3f9] hover:bg-[#e0e2e8] border border-[#e0e2e8] disabled:opacity-40 rounded-full text-[#181c20] transition-all font-['Space_Grotesk'] text-xs font-semibold cursor-pointer"
             >
-              <Code2 className="w-3 h-3 text-[#4edea3]" />
-              <span className="hidden sm:inline">PROMPT MATRIX</span>
+              <Code2 className="w-3.5 h-3.5 text-[#5046e5]" />
+              <span className="hidden sm:inline">Prompt Spec</span>
             </button>
 
-            {/* Reset Buffer */}
+            {/* Reset Session */}
             {currentTab === "chat" && activeBrand && (
               <button
                 type="button"
                 onClick={handleResetConversation}
-                className="h-7 px-2 bg-[#16181d] border border-[#232936] hover:border-[#333842] rounded-[2px] text-[#8f9194] hover:text-[#eef1f7] transition-all active:translate-y-[1px]"
-                title="Reset buffer"
+                className="h-8 w-8 flex items-center justify-center bg-[#f1f3f9] hover:bg-[#e0e2e8] border border-[#e0e2e8] rounded-full text-[#464555] hover:text-[#181c20] transition-all cursor-pointer"
+                title="Reset session history"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
@@ -743,125 +640,52 @@ export default function StudioPage() {
         {/* Tab Views */}
         {isLoadingData ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-            <div className="w-8 h-8 rounded-[2px] bg-[#16181d] border border-[#333842] flex items-center justify-center mb-3">
-              <Sparkles className="w-4 h-4 text-[#4edea3] animate-spin" />
+            <div className="w-10 h-10 rounded-full bg-[#e2dfff] flex items-center justify-center mb-3">
+              <Sparkles className="w-5 h-5 text-[#5046e5] animate-spin" />
             </div>
-            <p className="font-mono text-xs text-[#8f9194] tracking-wider uppercase">
-              CALIBRATING PRECISION WORKSPACE...
+            <p className="font-['Space_Grotesk'] font-semibold text-sm text-[#464555]">
+              Loading workspace...
             </p>
           </div>
         ) : currentTab === "chat" ? (
           !activeBrand ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto relative z-10">
-              <div className="w-14 h-14 rounded-lg bg-[#111317] border border-[#232936] flex items-center justify-center mb-5 shadow-2xl">
-                <Sliders className="w-6 h-6 text-[#4edea3]" />
+              <div className="w-16 h-16 rounded-2xl bg-[#e2dfff] flex items-center justify-center mb-5 shadow-sm">
+                <Sliders className="w-7 h-7 text-[#5046e5]" />
               </div>
-              <h2 className="font-mono text-sm uppercase tracking-widest text-[#eef1f7] mb-2 font-semibold">
-                SYSTEM UNCALIBRATED
+              <h2 className="font-['Space_Grotesk'] text-xl font-bold text-[#181c20] mb-2">
+                Brand Profile Required
               </h2>
-              <p className="font-mono text-[11px] text-[#8f9194] mb-6 leading-relaxed">
-                No active brand profile loaded. Initialize your brand DNA matrix (colors, typography, logo anchors) to begin high-precision visual generation.
+              <p className="text-sm text-[#464555] mb-6 leading-relaxed">
+                Set up your brand colors, logo, and tone to generate on-brand graphics.
               </p>
               <button
                 type="button"
                 onClick={() => setShowOnboardingModal(true)}
-                className="h-9 px-5 rounded-[2px] bg-[#eef1f7] hover:bg-white text-[#0c0e12] font-mono text-xs tracking-wider uppercase font-semibold flex items-center gap-2 border border-white/20 shadow-md active:translate-y-[1px] transition-all"
+                className="h-11 px-6 rounded-full bg-[#5046e5] hover:bg-[#4338ca] text-white font-['Space_Grotesk'] text-xs font-semibold flex items-center gap-2 shadow-[0_4px_14px_rgba(80,70,229,0.3)] transition-all cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" />
-                CALIBRATE BRAND SPEC
+                <Plus className="w-4 h-4" />
+                <span>Configure Brand DNA</span>
               </button>
             </div>
           ) : (
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-              {/* TOP TELEMETRY STRIP */}
-              <section className="w-full h-7 bg-[#111317]/90 backdrop-blur-sm border-b border-[#232936] flex items-center justify-between px-4 text-[#8f9194] z-20 shrink-0">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#4edea3] shadow-[0_0_6px_rgba(78,222,163,0.8)]" />
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-[#eef1f7] font-semibold">
-                      CALIBRATED WORKSPACE
-                    </span>
-                  </div>
-                  <div className="h-3 w-[1px] bg-[#232936]" />
-                  <span className="hidden sm:inline font-mono text-[9px] text-[#8f9194] tracking-wider">
-                    BUFFER: <span className="text-[#eef1f7]">{currentConvTitle}</span>
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 font-mono text-[9px] text-[#8f9194]">
-                  <span className="tracking-wider">CANVAS: <span className="text-[#eef1f7]">4096 × 4096 PX</span></span>
-                  <span className="hidden md:inline tracking-wider">LATENCY: <span className="text-[#4edea3]">14ms</span></span>
-                </div>
-              </section>
-
-              {/* CENTER STAGE (Infinite Focus Canvas & Messages Viewport) */}
-              <div className="relative flex-1 w-full overflow-y-auto p-4 md:p-8 pb-36 optical-grid-fine" id="chat-thread">
-                {/* Registration Grid Corner Crosshairs */}
-                <div className="absolute top-4 left-4 reg-mark">
-                  <p>┌ + REG_01 [NW]</p>
-                </div>
-                <div className="absolute top-4 right-4 reg-mark text-right">
-                  <p>+ ┐ REG_02 [NE]</p>
-                </div>
-
-                {/* Quota limit card if reached */}
-                {usageCount >= usageLimit && (
-                  <div className="max-w-2xl mx-auto mb-6">
-                    <LimitCard
-                      currentUsage={usageCount}
-                      monthlyLimit={usageLimit}
-                      planName="Precision Pro Tier"
-                      onUpgrade={() => setCurrentTab("settings")}
-                    />
-                  </div>
-                )}
-
+              {/* Scrollable Chat & Render Area */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 pb-48">
                 {/* Messages / Renders List */}
                 <div className="max-w-3xl mx-auto space-y-6 relative z-10">
-                  {/* Empty Slate if no messages or only 1 welcome message without image */}
+                  {/* Clean Empty State when session has no generated graphics yet */}
                   {messages.length <= 1 && !messages[0]?.image_url && (
-                    <div className="relative flex flex-col items-center justify-center py-10 transition-all duration-200">
-                      <div className="relative bg-[#111317] rounded-lg p-3 border border-[#232936] shadow-[0_24px_50px_-12px_rgba(0,0,0,0.9)] max-w-lg w-full">
-                        {/* Top specular wire */}
-                        <div className="absolute top-0 inset-x-2 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
-
-                        {/* Recessed well */}
-                        <div className="relative w-full h-[320px] bg-[#0c0e12] rounded-[2px] shadow-[inset_0_2px_8px_rgba(0,0,0,0.9)] border border-black/60 flex flex-col items-center justify-center p-6 text-center">
-                          {/* Tactical bounds */}
-                          <div className="absolute inset-3 border border-dashed border-[#232936] rounded-[1px] pointer-events-none flex flex-col justify-between p-2">
-                            <div className="flex justify-between font-mono text-[9px] text-[#8f9194]/40">
-                              <span>0,0</span>
-                              <span>1:1 BOUNDS [READY]</span>
-                              <span>4096,0</span>
-                            </div>
-                            <div className="flex justify-center items-center opacity-30">
-                              <Crop className="w-8 h-8 text-[#8f9194]" />
-                            </div>
-                            <div className="flex justify-between font-mono text-[9px] text-[#8f9194]/40">
-                              <span>0,4096</span>
-                              <span>STANDBY LATENT SPACE</span>
-                              <span>4096,4096</span>
-                            </div>
-                          </div>
-
-                          <div className="relative z-10 max-w-xs flex flex-col items-center gap-2">
-                            <div className="w-9 h-9 rounded-full bg-[#1e2024] flex items-center justify-center border border-[#333842] shadow-inner">
-                              <Terminal className="w-4 h-4 text-[#4edea3]" />
-                            </div>
-                            <p className="text-sm text-[#eef1f7] tracking-tight font-medium mt-1">
-                              &ldquo;Describe a visual to craft with your brand DNA.&rdquo;
-                            </p>
-                            <p className="font-mono text-[10px] text-[#8f9194] leading-relaxed">
-                              Calibrated against: {activeBrand.brand_name} • {activeBrand.primary_colour}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Footer Readout */}
-                        <div className="mt-2 px-2.5 py-1 flex items-center justify-between bg-[#0c0e12]/80 border border-[#232936] rounded-[2px] font-mono text-[9px] text-[#8f9194]">
-                          <span>STATE: UNALLOCATED BUFFER</span>
-                          <span className="text-[#eef1f7]">READY FOR SPECIFICATION INPUT</span>
-                        </div>
+                    <div className="bg-white rounded-3xl p-8 border border-[#e0e2e8] shadow-sm text-center max-w-lg mx-auto my-6 space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-[#e2dfff] flex items-center justify-center mx-auto">
+                        <Paintbrush className="w-6 h-6 text-[#5046e5]" />
                       </div>
+                      <h3 className="font-['Space_Grotesk'] text-lg font-bold text-[#181c20]">
+                        Ready to design for {activeBrand.brand_name}
+                      </h3>
+                      <p className="text-xs text-[#464555] leading-relaxed max-w-sm mx-auto">
+                        Enter a prompt in the box below or click any suggestion to create a graphic tailored to your brand colors and logo.
+                      </p>
                     </div>
                   )}
 
@@ -879,72 +703,85 @@ export default function StudioPage() {
                         !isUser &&
                         (Boolean(msg.metadata?.error) ||
                           msg.content.includes("Image Generation Failed") ||
-                          msg.content.includes("Failed to generate image") ||
-                          msg.content.includes("Optical Synthesis Failed"));
+                          msg.content.includes("Failed to generate image"));
 
                       return (
-                        <div
-                          key={msg.id}
-                          className={`flex items-start gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}
-                        >
-                          {/* Avatar Chip */}
-                          <div
-                            className={`w-6 h-6 rounded-[2px] flex items-center justify-center shrink-0 font-mono text-[10px] font-semibold ${
-                              isUser
-                                ? "bg-[#1e2024] text-[#eef1f7] border border-[#333842]"
-                                : isError
-                                ? "bg-[#ffb4ab]/10 text-[#ffb4ab] border border-[#ffb4ab]/30"
-                                : "bg-[#111317] text-[#4edea3] border border-[#232936]"
-                            }`}
-                          >
-                            {isUser ? (
-                              <User className="w-3.5 h-3.5" />
-                            ) : isError ? (
-                              <AlertCircle className="w-3.5 h-3.5 text-[#ffb4ab]" />
-                            ) : (
-                              <Bot className="w-3.5 h-3.5 text-[#4edea3]" />
-                            )}
-                          </div>
-
-                          {/* Bubble Container */}
-                          <div className={`max-w-[90%] ${msg.image_url ? "w-full" : ""}`}>
-                            {/* Text message (only if user or error or non-image message) */}
-                            {(!msg.image_url || isUser || isError) && msg.content && (
-                              <div
-                                className={`rounded-[2px] p-3 text-xs leading-relaxed ${
-                                  isUser
-                                    ? "bg-[#1e2024] border border-[#333842] text-[#eef1f7] font-mono text-[11px]"
-                                    : isError
-                                    ? "bg-[#ffb4ab]/5 border border-[#ffb4ab]/30 text-[#ffb4ab] font-mono text-[11px]"
-                                    : "bg-[#111317] border border-[#232936] text-[#c5c6ca] font-mono text-[11px]"
-                                }`}
-                              >
-                                <p className="whitespace-pre-wrap">{msg.content}</p>
+                        <div key={msg.id} className="w-full">
+                          {isUser ? (
+                            <div className="flex justify-end w-full">
+                              <div className="flex flex-col items-end max-w-xl group">
+                                <div className="flex items-center gap-1.5 mb-1 px-1">
+                                  <span className="font-['Space_Grotesk'] text-xs text-[#464555] font-medium">You</span>
+                                </div>
+                                <div className="bg-[#181829] text-white rounded-3xl rounded-tr-sm px-5 py-3.5 shadow-sm space-y-2.5">
+                                  {msg.metadata?.attachments && msg.metadata.attachments.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 pt-0.5">
+                                      {msg.metadata.attachments.map((att: any, idx: number) => (
+                                        <div
+                                          key={idx}
+                                          className="relative rounded-xl overflow-hidden border border-white/20 shadow-sm bg-black/30 group/att"
+                                        >
+                                          <img
+                                            src={att.data || att.url}
+                                            alt={att.name || `Reference ${idx + 1}`}
+                                            className="w-16 h-16 object-cover"
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {msg.content && (
+                                    <p className="text-sm leading-relaxed text-slate-100 whitespace-pre-wrap">{msg.content}</p>
+                                  )}
+                                </div>
                               </div>
-                            )}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-3 w-full">
+                              <div className="flex items-start gap-3 max-w-2xl">
+                                <div className="w-8 h-8 rounded-full bg-[#5046e5] text-white flex items-center justify-center shrink-0 shadow-sm">
+                                  <Sparkles className="w-4 h-4 text-white" />
+                                </div>
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-['Space_Grotesk'] font-semibold text-sm text-[#181c20]">Eidetic</span>
+                                  </div>
+                                  {msg.content && (
+                                    <p className={`text-sm leading-relaxed ${isError ? "text-red-600 bg-red-50 p-3 rounded-2xl border border-red-200" : "text-[#464555]"}`}>
+                                      {msg.content}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
 
-                            {/* Rendered graphic card */}
-                            {msg.image_url && (
-                              <GeneratedGraphicCard
-                                imageUrl={msg.image_url}
-                                metadata={msg.metadata}
-                                canvaConnected={canvaConnected}
-                                onConnectCanva={() => setShowCanvaModal(true)}
-                                brandName={activeBrand.brand_name}
-                                assetId={msg.asset_id}
-                                tenantId={activeBrand.tenant_id}
-                              />
-                            )}
-                          </div>
+                              {msg.image_url && (
+                                <div className="pl-11">
+                                  <GeneratedGraphicCard
+                                    imageUrl={msg.image_url}
+                                    metadata={msg.metadata}
+                                    brandName={activeBrand.brand_name}
+                                    assetId={msg.asset_id}
+                                    tenantId={activeBrand.tenant_id}
+                                    onRefine={() => setInputPrompt("Refine this graphic with adjusted color balance")}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
 
-                  {/* Latency Generating Indicator */}
+                  {/* Generating Status */}
                   {isGenerating && (
-                    <div className="flex items-center gap-2.5 font-mono text-[10px] text-[#4edea3] p-3 bg-[#111317] rounded-[2px] border border-[#232936] w-fit shadow-md">
-                      <div className="w-2 h-2 rounded-full bg-[#4edea3] animate-ping" />
-                      <span>SYNTHESIZING OPTICAL MATRIX // BRAND DNA: {activeBrand.brand_name.toUpperCase()}...</span>
+                    <div className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-[#e0e2e8] shadow-sm w-fit">
+                      <div className="w-8 h-8 rounded-full bg-[#e2dfff] flex items-center justify-center">
+                        <Sparkles className="w-4 h-4 text-[#5046e5] animate-spin" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <div className="font-['Space_Grotesk'] text-xs font-semibold text-[#181c20]">Generating Graphic</div>
+                        <div className="font-mono text-[10px] text-[#464555]">Applying {activeBrand.brand_name} brand DNA...</div>
+                      </div>
                     </div>
                   )}
 
@@ -952,49 +789,119 @@ export default function StudioPage() {
                 </div>
               </div>
 
-              {/* DOCKED FLOATING COMMAND UNIT (Bottom Center Machined Console) */}
-              <footer className="fixed bottom-5 inset-x-0 mx-auto w-[94%] max-w-[780px] z-50 pointer-events-auto">
-                <div className="relative machined-plate rounded-lg p-2 bg-[#111317]/95 backdrop-blur-md">
-                  {/* Top Specular Highlight Wire */}
-                  <div className="absolute top-0 inset-x-4 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none" />
+              {/* DOCKED FLOATING COMMAND UNIT */}
+              <footer className="fixed bottom-6 inset-x-0 mx-auto w-[94%] max-w-3xl z-50 pointer-events-auto">
+                <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-3.5 shadow-lg shadow-[#5046e5]/10 border border-[#e0e2e8] space-y-2.5">
+                  {/* Suggestion Chips Bar with Scroll Buttons */}
+                  <div className="flex items-center gap-1.5 w-full">
+                    <button
+                      type="button"
+                      onClick={() => handleScrollSuggestions("left")}
+                      disabled={!canScrollSuggestionsLeft}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all cursor-pointer ${
+                        canScrollSuggestionsLeft
+                          ? "bg-white hover:bg-[#f1f3f9] text-[#181c20] border-[#e0e2e8] shadow-sm"
+                          : "opacity-30 cursor-not-allowed bg-transparent text-[#777587] border-transparent"
+                      }`}
+                      title="Scroll suggestions left"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
 
-                  {/* Execution Progress Bar */}
-                  {isGenerating && (
-                    <div className="absolute -top-[2px] left-3 right-3 h-[2px] bg-[#1e2024] overflow-hidden rounded-full">
-                      <div className="h-full bg-[#4edea3] shadow-[0_0_8px_rgba(78,222,163,0.9)] animate-pulse w-full" />
+                    <div
+                      ref={suggestionsScrollRef}
+                      onScroll={checkSuggestionsScroll}
+                      className="flex-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth px-0.5"
+                    >
+                      {PROMPT_SUGGESTIONS.map((sugg, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => handleSendMessage(sugg)}
+                          className="shrink-0 font-['Space_Grotesk'] text-xs px-3 py-1 rounded-full bg-[#f1f3f9] hover:bg-[#e2dfff] text-[#464555] hover:text-[#5046e5] transition-colors cursor-pointer border border-[#e0e2e8]"
+                        >
+                          + {sugg}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleScrollSuggestions("right")}
+                      disabled={!canScrollSuggestionsRight}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all cursor-pointer ${
+                        canScrollSuggestionsRight
+                          ? "bg-white hover:bg-[#f1f3f9] text-[#181c20] border-[#e0e2e8] shadow-sm"
+                          : "opacity-30 cursor-not-allowed bg-transparent text-[#777587] border-transparent"
+                      }`}
+                      title="Scroll suggestions right"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Format Presets Dial */}
+                  <FormatPresetsBar
+                    selectedPreset={selectedPreset}
+                    onSelectPreset={handleSelectPreset}
+                    customRatio={customRatio}
+                    setCustomRatio={setCustomRatio}
+                  />
+
+                  {/* Attachment Preview Strip */}
+                  {attachedImages.length > 0 && (
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {attachedImages.map((att, idx) => (
+                        <div
+                          key={idx}
+                          className="relative shrink-0 flex items-center gap-2 bg-[#f1f3f9] border border-[#e0e2e8] rounded-xl p-1.5 pr-2.5 shadow-sm"
+                        >
+                          <img
+                            src={att.data}
+                            alt={att.name || `Attachment ${idx + 1}`}
+                            className="w-7 h-7 rounded-lg object-cover"
+                          />
+                          <span className="font-['Space_Grotesk'] text-xs text-[#181c20] font-medium max-w-[120px] truncate">
+                            {att.name || `Image ${idx + 1}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttachment(idx)}
+                            className="text-[#777587] hover:text-red-600 transition-colors cursor-pointer p-0.5"
+                            title="Remove attachment"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
 
-                  {/* Suggestion Chips Bar */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar mb-2 px-0.5">
-                    {PROMPT_SUGGESTIONS.map((sugg, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => handleSendMessage(sugg)}
-                        className="shrink-0 font-mono text-[9px] px-2 py-0.5 rounded-[1px] bg-[#0c0e12] hover:bg-[#1e2024] text-[#8f9194] hover:text-[#eef1f7] border border-[#232936] transition-colors"
-                      >
-                        + {sugg}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Input Tray & Generate Trigger */}
+                  <div className="flex items-center gap-2 pt-0.5">
+                    {/* Hidden file input for reference images */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 border transition-all cursor-pointer ${
+                        attachedImages.length > 0
+                          ? "bg-[#e2dfff] text-[#5046e5] border-[#5046e5]/30 shadow-sm"
+                          : "bg-[#f1f3f9] hover:bg-[#e2dfff] text-[#464555] hover:text-[#5046e5] border-[#e0e2e8]"
+                      }`}
+                      title="Attach reference image"
+                    >
+                      <ImagePlus className="w-5 h-5" />
+                    </button>
 
-                  <div className="flex flex-col md:flex-row items-center gap-2">
-                    {/* PART A: Tactile Format Preset Dial / Segmented Rocker */}
-                    <div className="w-full md:w-auto shrink-0">
-                      <FormatPresetsBar
-                        selectedPreset={selectedPreset}
-                        onSelectPreset={handleSelectPreset}
-                        customRatio={customRatio}
-                        setCustomRatio={setCustomRatio}
-                      />
-                    </div>
-
-                    {/* PART B: Direct Specification Input Well */}
-                    <div className="relative flex-1 w-full bg-[#0c0e12] rounded-[2px] border border-[#232936] shadow-[inset_0_1px_3px_rgba(0,0,0,0.8)] flex items-center px-2.5 py-1.5 focus-within:border-[#333842] transition-colors">
-                      <span className="font-mono text-[#8f9194] text-[11px] mr-2 shrink-0 select-none">
-                        &gt;
-                      </span>
+                    <div className="relative flex-1 bg-[#f1f3f9] rounded-2xl px-4 py-2.5 flex items-center border border-[#e0e2e8] focus-within:border-[#5046e5] focus-within:bg-white transition-all">
                       <input
                         id="chat-prompt-input"
                         type="text"
@@ -1006,53 +913,34 @@ export default function StudioPage() {
                             handleSendMessage();
                           }
                         }}
-                        placeholder={`Direct visual specification for ${activeBrand.brand_name}...`}
-                        className="w-full bg-transparent border-none outline-none font-sans text-xs text-[#eef1f7] placeholder-[#8f9194] font-normal tracking-tight"
+                        placeholder={`Describe a graphic for ${activeBrand.brand_name}...`}
+                        className="w-full bg-transparent border-none outline-none font-sans text-sm text-[#181c20] placeholder-[#777587]"
                       />
                       {inputPrompt && (
                         <button
                           type="button"
                           onClick={() => setInputPrompt("")}
-                          className="text-[#8f9194] hover:text-[#eef1f7] transition-colors ml-1 p-0.5 shrink-0"
-                          title="Clear buffer"
+                          className="text-[#777587] hover:text-[#181c20] ml-2 p-1"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
 
-                    {/* PART C: Primary Instrument Trigger [GENERATE] */}
                     <button
                       id="send-prompt-btn"
                       type="button"
-                      disabled={!inputPrompt.trim() || isGenerating}
+                      disabled={(!inputPrompt.trim() && attachedImages.length === 0) || isGenerating}
                       onClick={() => handleSendMessage()}
-                      className={`w-full md:w-auto shrink-0 h-8 px-4 rounded-[2px] font-mono text-[10px] tracking-wider uppercase font-semibold flex items-center justify-center gap-1.5 border border-white/20 active:translate-y-[1px] transition-all ${
-                        inputPrompt.trim() && !isGenerating
-                          ? "bg-[#eef1f7] hover:bg-white text-[#0c0e12] shadow-[0_2px_6px_rgba(0,0,0,0.6)] cursor-pointer"
-                          : "bg-[#1e2024] text-[#8f9194] border-[#232936] cursor-not-allowed opacity-60"
+                      className={`h-11 px-6 rounded-2xl font-['Space_Grotesk'] text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        (inputPrompt.trim() || attachedImages.length > 0) && !isGenerating
+                          ? "bg-[#5046e5] hover:bg-[#4338ca] text-white shadow-sm active:scale-95"
+                          : "bg-[#e0e2e8] text-[#777587] cursor-not-allowed"
                       }`}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#4edea3] shadow-[0_0_4px_rgba(78,222,163,1)]" />
-                      <span>GENERATE</span>
-                      <ArrowUpRight className="w-3 h-3 font-bold" />
+                      <span>Generate</span>
+                      <ArrowUpRight className="w-4 h-4" />
                     </button>
-                  </div>
-
-                  {/* Micro Status Line Under Console Bar */}
-                  <div className="mt-1.5 px-1.5 flex items-center justify-between font-mono text-[8px] text-[#8f9194]">
-                    <div className="flex items-center gap-2">
-                      <span>PIPELINE: EIDETIC-FP16</span>
-                      <span>•</span>
-                      <span className={isGenerating ? "text-[#4edea3] animate-pulse" : "text-[#8f9194]"}>
-                        {isGenerating ? "SYNTHESIZING // ACTIVE" : "SYSTEM IDLE // READY"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span>CFG: 7.2</span>
-                      <span>STEPS: 32</span>
-                      <span>SEED: AUTO</span>
-                    </div>
                   </div>
                 </div>
               </footer>
@@ -1064,8 +952,6 @@ export default function StudioPage() {
         {currentTab === "assets" && (
           <AssetGallery
             assets={assets}
-            canvaConnected={canvaConnected}
-            onConnectCanva={() => setShowCanvaModal(true)}
             onDeleteAsset={handleDeleteAsset}
             brandName={activeBrand?.brand_name || "Brand"}
           />
@@ -1076,22 +962,22 @@ export default function StudioPage() {
             <BrandProfileView brand={activeBrand} onUpdateBrand={handleUpdateBrand} />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto">
-              <div className="w-12 h-12 rounded-[2px] bg-[#111317] border border-[#232936] flex items-center justify-center mb-4">
-                <Sliders className="w-6 h-6 text-[#4edea3]" />
+              <div className="w-12 h-12 rounded-2xl bg-[#e2dfff] flex items-center justify-center mb-4">
+                <Sliders className="w-6 h-6 text-[#5046e5]" />
               </div>
-              <h2 className="font-mono text-xs uppercase tracking-widest text-[#eef1f7] mb-2 font-semibold">
-                NO BRAND SPECIFICATION CONFIGURED
+              <h2 className="font-['Space_Grotesk'] text-lg font-bold text-[#181c20] mb-2">
+                No Brand Profile Configured
               </h2>
-              <p className="font-mono text-[11px] text-[#8f9194] mb-6 leading-relaxed">
-                Configure your brand DNA (palette, typography, logo anchors, and tone tags) to generate calibrated graphics.
+              <p className="text-xs text-[#464555] mb-6 leading-relaxed">
+                Configure your brand colors, logo, and tone to generate on-brand graphics.
               </p>
               <button
                 type="button"
                 onClick={() => setShowOnboardingModal(true)}
-                className="h-8 px-4 rounded-[2px] bg-[#eef1f7] hover:bg-white text-[#0c0e12] font-mono text-xs tracking-wider uppercase font-semibold flex items-center gap-1.5 transition-all"
+                className="h-10 px-5 rounded-full bg-[#5046e5] hover:bg-[#4338ca] text-white font-['Space_Grotesk'] text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                CREATE BRAND SPEC
+                <span>Create Brand Profile</span>
               </button>
             </div>
           )
@@ -1099,102 +985,36 @@ export default function StudioPage() {
 
         {currentTab === "settings" && (
           <SettingsView
-            canvaConnected={canvaConnected}
-            onToggleCanva={setCanvaConnected}
-            usageCount={usageCount}
-            usageLimit={usageLimit}
-            onOpenUpgrade={() => setShowUpgradeModal(true)}
             tenantId={activeBrand?.tenant_id || tenantId || undefined}
           />
         )}
       </main>
 
-      {/* Canva Partner Connect Modal */}
-      {showCanvaModal && (
-        <div
-          id="canva-connect-modal"
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
-        >
-          <div className="w-full max-w-md bg-[#111317] border border-[#333842] rounded-lg p-6 space-y-4 shadow-2xl relative">
-            <button
-              type="button"
-              onClick={() => setShowCanvaModal(false)}
-              className="absolute top-4 right-4 p-1 text-[#8f9194] hover:text-white rounded-[2px]"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-[2px] bg-[#1e2024] border border-[#333842] flex items-center justify-center text-cyan-400">
-                  <Layers className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-mono text-xs uppercase tracking-wider text-[#eef1f7] font-semibold">
-                    CANVA PARTNER CONNECT
-                  </h3>
-                  <p className="font-mono text-[10px] text-[#8f9194]">Direct design canvas bridge</p>
-                </div>
+      {/* System Prompt Spec Inspector Modal */}
+      {showSystemPromptModal && (
+        <div className="fixed inset-0 z-50 bg-[#181829]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-white rounded-3xl p-6 space-y-4 shadow-xl border border-[#e0e2e8] relative max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-2 border-b border-[#e0e2e8]">
+              <div className="flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-[#5046e5]" />
+                <h3 className="font-['Space_Grotesk'] text-sm font-bold text-[#181c20]">
+                  System Prompt Specification
+                </h3>
               </div>
-              <span className="font-mono text-[9px] px-2 py-0.5 rounded-[1px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
-                PENDING
-              </span>
-            </div>
-
-            <p className="text-xs text-[#c5c6ca] leading-relaxed">
-              We are finalizing our official Canva Connect Partner API integration. Once verified,
-              you will be able to export any generated graphic directly into Canva with 1 click to edit layers,
-              custom typography, and brand kits.
-            </p>
-
-            <div className="p-3 rounded-[2px] bg-[#0c0e12] border border-[#232936] font-mono text-[10px] space-y-1.5">
-              <div className="text-[#eef1f7] font-semibold flex items-center gap-1.5">
-                <CheckCircle2 className="w-3 h-3 text-cyan-400" />
-                UPCOMING PIPELINE CAPABILITIES:
-              </div>
-              <ul className="text-[#8f9194] space-y-1 list-disc list-inside">
-                <li>Auto-sync graphic assets to your Canva Team account</li>
-                <li>Launch Canva editor pre-filled with matching aspect ratio canvas</li>
-                <li>Preserve prompt snapshots and brand color palettes</li>
-              </ul>
-            </div>
-
-            <div className="pt-2 flex justify-end">
               <button
                 type="button"
-                onClick={() => setShowCanvaModal(false)}
-                className="h-8 px-4 rounded-[2px] bg-[#1e2024] hover:bg-[#282a2e] text-[#eef1f7] font-mono text-[10px] tracking-wider uppercase border border-[#333842] transition-colors"
+                onClick={() => setShowSystemPromptModal(false)}
+                className="w-7 h-7 rounded-full hover:bg-[#f1f3f9] text-[#464555] flex items-center justify-center"
               >
-                DISMISS
+                <X className="w-4 h-4" />
               </button>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* System Prompt DNA Inspector Modal */}
-      {showSystemPromptModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-          <div className="w-full max-w-2xl bg-[#111317] border border-[#333842] rounded-lg p-6 space-y-4 shadow-2xl relative max-h-[85vh] flex flex-col">
-            <button
-              type="button"
-              onClick={() => setShowSystemPromptModal(false)}
-              className="absolute top-4 right-4 p-1 text-[#8f9194] hover:text-white rounded-[2px]"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center gap-2">
-              <Code2 className="w-4 h-4 text-[#4edea3]" />
-              <h3 className="font-mono text-xs uppercase tracking-wider text-[#eef1f7] font-semibold">
-                5-LAYER SYSTEM PROMPT MATRIX
-              </h3>
-            </div>
-            <p className="font-mono text-[10px] text-[#8f9194]">
-              Dynamically synthesized per brand specification to enforce strict visual identity.
+            <p className="text-xs text-[#464555]">
+              The dynamic prompt structure synthesized for {activeBrand?.brand_name || "your brand"} to enforce brand consistency.
             </p>
 
-            <div className="flex-1 overflow-y-auto bg-[#0c0e12] p-4 rounded-[2px] border border-[#232936] font-mono text-[10px] text-[#4edea3]/90 leading-relaxed whitespace-pre-wrap">
+            <div className="flex-1 overflow-y-auto bg-[#f1f3f9] p-4 rounded-2xl border border-[#e0e2e8] font-mono text-[11px] text-[#181c20] leading-relaxed whitespace-pre-wrap">
               {activeBrand ? (
                 buildSystemPrompt(
                   activeBrand,
@@ -1210,9 +1030,9 @@ export default function StudioPage() {
               <button
                 type="button"
                 onClick={() => setShowSystemPromptModal(false)}
-                className="h-8 px-4 rounded-[2px] bg-[#1e2024] hover:bg-[#282a2e] text-[#eef1f7] font-mono text-[10px] tracking-wider uppercase border border-[#333842]"
+                className="h-9 px-5 rounded-full bg-[#f1f3f9] hover:bg-[#e0e2e8] text-[#181c20] font-['Space_Grotesk'] text-xs font-semibold border border-[#e0e2e8]"
               >
-                CLOSE
+                Close
               </button>
             </div>
           </div>
@@ -1225,16 +1045,6 @@ export default function StudioPage() {
         onClose={() => setShowOnboardingModal(false)}
         onComplete={handleOnboardingComplete}
         tenantId={tenantId || generateUUID()}
-      />
-
-      {/* Upgrade / Plan Selection Modal */}
-      <UpgradeModal
-        isOpen={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        currentPlan={currentPlan}
-        onSelectPlan={(plan) => {
-          setCurrentPlan(plan);
-        }}
       />
     </div>
   );

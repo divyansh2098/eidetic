@@ -54,6 +54,53 @@ export class GeminiImageProvider implements ImageGeneratorProvider {
 
     let lastError: any = null;
 
+    console.log(
+      `[GeminiImageProvider] Generating graphic with model ${targetModel} | Ratio: ${apiRatio} | Reference images: ${req.referenceImages?.length || 0}\nPrompt: "${req.prompt}"`
+    );
+
+    const imageParts = (req.referenceImages || [])
+      .filter((img) => Boolean(img.dataBase64))
+      .map((img) => ({
+        inlineData: {
+          mimeType: img.mimeType || "image/png",
+          data: (img.dataBase64 || "").replace(/^data:[^;]+;base64,/, ""),
+        },
+      }));
+
+    // 0. If reference images are provided, prioritize multimodal generateContent
+    if (imageParts.length > 0) {
+      try {
+        const response = await this.ai.models.generateContent({
+          model: targetModel,
+          contents: [...imageParts, req.prompt],
+          config: {
+            responseModalities: ["IMAGE"] as any,
+          },
+        });
+
+        const candidate = response.candidates?.[0];
+        for (const part of candidate?.content?.parts || []) {
+          if ((part as any)?.inlineData?.data) {
+            const base64Data = (part as any).inlineData.data;
+            const mimeType = (part as any).inlineData.mimeType || "image/png";
+            return {
+              image: Buffer.from(base64Data, "base64"),
+              format: mimeType.includes("webp") ? "webp" : "png",
+              metadata: {
+                provider: "gemini",
+                model: targetModel,
+                inferenceTimeMs: Date.now() - startTime,
+                estimatedCostUsd: 0.0002,
+              },
+            };
+          }
+        }
+      } catch (multiContentErr: any) {
+        lastError = multiContentErr;
+        console.warn(`[GoogleGenAI] Multimodal generateContent call failed:`, multiContentErr);
+      }
+    }
+
     // 1. Primary: Use GoogleGenAI JS Client with ai.interactions.create
     try {
       const interaction = await (this.ai as any).interactions?.create({
@@ -111,9 +158,10 @@ export class GeminiImageProvider implements ImageGeneratorProvider {
 
     // 3. Next: Use GoogleGenAI JS Client with ai.models.generateContent (responseModalities: ["IMAGE"])
     try {
+      const contents = imageParts.length > 0 ? [...imageParts, req.prompt] : req.prompt;
       const response = await this.ai.models.generateContent({
         model: targetModel,
-        contents: req.prompt,
+        contents,
         config: {
           responseModalities: ["IMAGE"] as any,
         },
@@ -206,27 +254,47 @@ export class GeminiOrchestratorProvider implements OrchestratorProvider {
 
 Respond strictly in valid JSON with:
 {
-  "imagePrompt": "Detailed photographic/graphic prompt with color palette, composition, and visual parameters",
+  "imagePrompt": "Detailed photographic/graphic prompt with color palette, composition, visual parameters${req.outputConstraints.includeLogoInstructions ? `, and explicit placement of the official ${req.brandProfile.brand_name} logo at the ${req.outputConstraints.logoPosition?.replace(/-/g, " ") || "bottom-right"} corner` : ""}",
   "chatResponse": "Concise natural explanation of design choices to display to the user",
   "layoutHints": "Composition and negative space guidelines"
-}`
+}
+
+IMPORTANT: ${req.outputConstraints.includeLogoInstructions ? `The generated "imagePrompt" MUST explicitly describe the placement of the ${req.brandProfile.brand_name} logo positioned at the ${req.outputConstraints.logoPosition?.replace(/-/g, " ") || "bottom-right"} of the image.` : ""}`
           : `You are Eidetic's Brand Graphic Orchestrator.
 Brand: ${req.brandProfile.brand_name} (${req.brandProfile.brand_description})
 Primary colour: ${req.brandProfile.primary_colour}
 Tone: ${req.brandProfile.tone_of_voice.join(", ")}
 Target output format: ${req.outputConstraints.formatPreset} (${req.outputConstraints.aspectRatio})
+Logo placement: ${req.outputConstraints.includeLogoInstructions ? `Include ${req.brandProfile.brand_name} logo at ${req.outputConstraints.logoPosition?.replace(/-/g, " ") || "bottom-right"}` : "None"}
 User request: "${req.userMessage}"
 
 Respond in JSON with:
 {
-  "imagePrompt": "Detailed photographic/graphic prompt with color palette and composition",
+  "imagePrompt": "Detailed photographic/graphic prompt with color palette, composition, and explicit ${req.brandProfile.brand_name} logo placement",
   "chatResponse": "Concise natural explanation of the design choices",
   "layoutHints": "Composition and negative space guidelines"
 }`;
 
+        const imageParts = (req.referenceImages || [])
+          .filter((img) => Boolean(img.dataBase64))
+          .map((img) => ({
+            inlineData: {
+              mimeType: img.mimeType || "image/png",
+              data: (img.dataBase64 || "").replace(/^data:[^;]+;base64,/, ""),
+            },
+          }));
+
+        const refPromptNote =
+          imageParts.length > 0
+            ? `\n\nReference Imagery Attached: The user has attached ${imageParts.length} reference image(s). Analyze the visual subject, styling, and elements in the reference image(s) and integrate them into the imagePrompt while strictly adhering to the brand's aesthetic guidelines.`
+            : "";
+
+        const contents =
+          imageParts.length > 0 ? [...imageParts, prompt + refPromptNote] : prompt;
+
         const response = await this.ai.models.generateContent({
           model: this.model,
-          contents: prompt,
+          contents,
           config: { responseMimeType: "application/json" },
         });
 
@@ -245,10 +313,14 @@ Respond in JSON with:
     }
 
     // High quality deterministic fallback when in dev mode
+    const logoInstruction = req.outputConstraints.includeLogoInstructions
+      ? ` Featuring the official ${req.brandProfile.brand_name} logo cleanly positioned in the ${req.outputConstraints.logoPosition?.replace(/-/g, " ") || "bottom-right"} corner.`
+      : "";
+
     return {
-      imagePrompt: `A high-end, premium brand graphic for ${req.brandProfile.brand_name}. Concept: ${req.userMessage}. Palette featuring primary ${req.brandProfile.primary_colour} and secondary tones. Aspect ratio ${req.outputConstraints.aspectRatio}, clean typography, sleek lighting, studio quality rendering.`,
+      imagePrompt: `A high-end, premium brand graphic for ${req.brandProfile.brand_name}. Concept: ${req.userMessage}. Palette featuring primary ${req.brandProfile.primary_colour} and secondary tones. Aspect ratio ${req.outputConstraints.aspectRatio}, clean typography, sleek lighting, studio quality rendering.${logoInstruction}`,
       chatResponse: `Here is a custom graphic for ${req.brandProfile.brand_name} formatted for ${req.outputConstraints.formatPreset} (${req.outputConstraints.aspectRatio}). The aesthetic adheres to your ${req.brandProfile.tone_of_voice.join(", ")} tone guidelines.`,
-      layoutHints: "Centered hero subject with clean negative space for copy and bottom-right logo placement.",
+      layoutHints: `Centered hero subject with clean negative space for copy and ${req.outputConstraints.logoPosition?.replace(/-/g, " ") || "bottom-right"} logo placement.`,
     };
   }
 }

@@ -11,8 +11,7 @@ import {
   X, 
   Maximize2, 
   Image as ImageIcon,
-  Crop,
-  Layers,
+  FolderOpen,
 } from "lucide-react";
 
 interface AssetGalleryProps {
@@ -34,11 +33,11 @@ export function AssetGallery({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const presets = [
-    { key: "all", label: "ALL BUFFERS" },
-    { key: "instagram_post", label: "1:1 SQ" },
-    { key: "instagram_story", label: "9:16 VERT" },
-    { key: "wide_banner", label: "16:9 BANNER" },
-    { key: "portrait", label: "4:5 PORT" },
+    { key: "all", label: "All Formats" },
+    { key: "portrait", label: "4:5 Portrait" },
+    { key: "instagram_post", label: "1:1 Square" },
+    { key: "instagram_story", label: "9:16 Story" },
+    { key: "wide_banner", label: "16:9 Banner" },
   ];
 
   const filteredAssets = assets.filter((asset) => {
@@ -66,14 +65,12 @@ export function AssetGallery({
       await navigator.clipboard.writeText(asset.public_url);
       setCopiedId(asset.id);
       setTimeout(() => setCopiedId(null), 2000);
-    } catch {
-      // Fallback
-    }
+    } catch {}
   };
 
   const handleDelete = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (window.confirm("Purge this synthesized asset from the archive?")) {
+    if (window.confirm("Delete this asset from your archive?")) {
       onDeleteAsset(id);
       if (previewAsset?.id === id) {
         setPreviewAsset(null);
@@ -82,201 +79,199 @@ export function AssetGallery({
   };
 
   return (
-    <div className="flex-1 h-full overflow-y-auto p-4 md:p-8 space-y-6 optical-grid-fine" id="asset-gallery-view">
-      {/* Top Header Rail */}
-      <div className="w-full bg-[#111317] p-3 rounded-[2px] border border-[#232936] flex flex-wrap items-center justify-between gap-3 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs tracking-[0.2em] text-[#eef1f7] font-semibold uppercase">
-              ARCHIVE // VISUAL ASSETS
-            </span>
-            <div className="w-1.5 h-1.5 rounded-full bg-[#4edea3] shadow-[0_0_6px_rgba(78,222,163,0.8)]" />
+    <div className="flex-1 h-full overflow-y-auto bg-[#f7f9ff] text-[#181c20] p-6 lg:p-10 space-y-8" id="asset-gallery-view">
+      {/* Header Context Block matching Stitch */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 max-w-6xl mx-auto">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#e2dfff] text-[#3422cc] font-mono text-[11px] font-bold uppercase mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#5046e5] animate-pulse" />
+            Asset Archive & Gallery
           </div>
-          <div className="h-3 w-px bg-[#232936] hidden sm:block" />
-          <div className="bg-[#0c0e12] px-2 py-0.5 rounded-[1px] border border-[#232936] font-mono text-[9px] text-[#8f9194]">
-            COUNT: <span className="text-[#eef1f7]">{String(assets.length).padStart(2, "0")}</span> / 4096
-          </div>
+          <h1 className="font-headline text-3xl lg:text-4xl font-bold text-[#181c20] tracking-tight">
+            Generated Asset Library
+          </h1>
+          <p className="text-sm text-[#464555] max-w-2xl mt-1 leading-relaxed">
+            Search, inspect, and export your brand-compliant visual drops across multi-channel presets.
+          </p>
         </div>
 
-        {/* Filter and Search Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Search Well */}
-          <div className="relative">
-            <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8f9194]" />
-            <input
-              type="text"
-              placeholder="SEARCH ASSETS..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-7 pr-2.5 py-1 bg-[#0c0e12] border border-[#232936] rounded-[1px] font-mono text-[10px] text-[#eef1f7] placeholder-[#8f9194] focus:outline-none focus:border-[#333842] w-44 transition-colors uppercase"
-            />
-          </div>
+        <div className="flex items-center gap-2 font-mono text-xs text-[#464555] bg-white px-4 py-2 rounded-full border border-[#e0e2e8] shadow-sm">
+          <span>Total Drops:</span>
+          <strong className="text-[#5046e5] font-bold">{assets.length}</strong>
+        </div>
+      </div>
 
-          {/* Segmented Rocker Filter */}
-          <div className="flex items-center bg-[#0c0e12] p-0.5 rounded-[1px] border border-[#232936]">
-            {presets.map((p) => (
+      {/* Filter and Search Bar Container */}
+      <div className="max-w-6xl mx-auto bg-white p-4 rounded-2xl border border-[#e0e2e8] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+        {/* Preset Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
+          {presets.map((p) => {
+            const isSelected = filterPreset === p.key;
+            return (
               <button
                 key={p.key}
                 type="button"
                 onClick={() => setFilterPreset(p.key)}
-                className={`px-2 py-0.5 rounded-[1px] font-mono text-[9px] transition-all uppercase ${
-                  filterPreset === p.key
-                    ? "bg-[#1e2024] text-[#eef1f7] border border-[#333842] font-semibold shadow-sm"
-                    : "text-[#8f9194] hover:text-[#c5c6ca]"
+                className={`h-9 px-4 rounded-full font-headline text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                  isSelected
+                    ? "bg-[#5046e5] text-white shadow-sm"
+                    : "bg-[#f1f3f9] text-[#464555] hover:text-[#181c20] hover:bg-[#e0e2e8]"
                 }`}
               >
                 {p.label}
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </div>
+
+        {/* Search Input Well */}
+        <div className="relative w-full sm:w-64">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#777587]" />
+          <input
+            type="text"
+            placeholder="Search formats..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-[#f1f3f9] border border-[#e0e2e8] rounded-full text-xs text-[#181c20] placeholder-[#777587] outline-none focus:border-[#5046e5] transition-colors"
+          />
         </div>
       </div>
 
-      {/* Exhibition Grid */}
-      {filteredAssets.length === 0 ? (
-        <div className="py-24 text-center space-y-2">
-          <div className="w-12 h-12 rounded-[2px] bg-[#111317] border border-[#232936] flex items-center justify-center mx-auto text-[#8f9194]">
-            <ImageIcon className="w-5 h-5" />
-          </div>
-          <p className="font-mono text-xs uppercase tracking-wider text-[#eef1f7] font-semibold">
-            {searchQuery || filterPreset !== "all" ? "NO MATCHING ASSETS LOCATED" : "ARCHIVE UNPOPULATED"}
-          </p>
-          <p className="font-mono text-[10px] text-[#8f9194] max-w-sm mx-auto">
-            Render brand graphics in the Studio Canvas to archive high-resolution assets here.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {filteredAssets.map((asset) => (
-            <div
-              key={asset.id}
-              onClick={() => setPreviewAsset(asset)}
-              className="group relative bg-[#111317] rounded-lg p-2 border border-[#232936] hover:border-[#333842] shadow-md transition-all cursor-pointer flex flex-col justify-between"
-            >
-              {/* Top Specular Edge */}
-              <div className="absolute top-0 inset-x-2 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
-
-              {/* Recessed Image Viewport */}
-              <div className="relative w-full aspect-square bg-[#0c0e12] overflow-hidden rounded-[2px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)] border border-black/50 flex items-center justify-center">
-                {/* Corner registration mark */}
-                <div className="absolute top-2 left-2 z-20 pointer-events-none font-mono text-[9px] text-[#eef1f7] opacity-60">
-                  +
-                </div>
-                <div className="absolute top-2 right-2 z-20 pointer-events-none font-mono text-[9px] text-[#eef1f7] opacity-60">
-                  +
-                </div>
-
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={asset.public_url}
-                  alt="Asset render"
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                />
-
-                {/* Floating Format Pill */}
-                <div className="absolute top-2 left-5 z-20 pointer-events-none font-mono text-[8px] px-1.5 py-0.5 rounded-[1px] bg-[#0c0e12]/80 backdrop-blur-md border border-[#232936] text-[#eef1f7]">
-                  {asset.aspect_ratio}
-                </div>
-
-                {/* Hover Trigger Bar */}
-                <div className="absolute inset-0 bg-[#0c0e12]/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 z-30">
-                  <button
-                    type="button"
-                    onClick={(e) => handleDownload(asset, e)}
-                    className="p-1.5 rounded-[1px] bg-[#1e2024] hover:bg-[#282a2e] text-[#eef1f7] border border-[#333842] transition-colors"
-                    title="Download Raw"
-                  >
-                    <Download className="w-3.5 h-3.5 text-[#4edea3]" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => handleCopyUrl(asset, e)}
-                    className="p-1.5 rounded-[1px] bg-[#1e2024] hover:bg-[#282a2e] text-[#eef1f7] border border-[#333842] transition-colors"
-                    title="Copy URL"
-                  >
-                    {copiedId === asset.id ? (
-                      <Check className="w-3.5 h-3.5 text-[#4edea3]" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => handleDelete(asset.id, e)}
-                    className="p-1.5 rounded-[1px] bg-[#1e2024] hover:bg-[#282a2e] text-[#8f9194] hover:text-[#ffb4ab] border border-[#333842] transition-colors"
-                    title="Purge Asset"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Milled Card Base Telemetry */}
-              <div className="mt-2 px-1 flex items-center justify-between font-mono text-[8px] text-[#8f9194]">
-                <span className="truncate">ID: {asset.id.slice(0, 8)}</span>
-                <span className="text-[#c5c6ca]">{asset.format.toUpperCase()} RAW</span>
-              </div>
+      {/* Assets Grid */}
+      <div className="max-w-6xl mx-auto">
+        {filteredAssets.length === 0 ? (
+          <div className="bg-white rounded-3xl p-12 text-center border border-[#e0e2e8] shadow-sm max-w-lg mx-auto space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#e2dfff] flex items-center justify-center mx-auto text-[#5046e5]">
+              <FolderOpen className="w-7 h-7" />
             </div>
-          ))}
-        </div>
-      )}
+            <h3 className="font-headline font-bold text-lg text-[#181c20]">
+              No assets found
+            </h3>
+            <p className="text-sm text-[#464555] leading-relaxed">
+              Generate new graphics in the Studio Canvas to archive high-resolution assets here.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {filteredAssets.map((asset) => (
+              <div
+                key={asset.id}
+                onClick={() => setPreviewAsset(asset)}
+                className="group relative bg-white rounded-3xl overflow-hidden border border-[#e0e2e8] shadow-[0_4px_20px_-2px_rgba(80,70,229,0.05)] hover:shadow-[0_12px_32px_-4px_rgba(80,70,229,0.15)] transition-all cursor-pointer flex flex-col justify-between"
+              >
+                {/* Image Area */}
+                <div className="relative w-full aspect-[4/5] bg-[#f1f3f9] overflow-hidden flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={asset.public_url}
+                    alt={asset.format_preset}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
 
-      {/* Lightbox Inspector Modal */}
+                  <div className="absolute top-3 left-3">
+                    <span className="font-mono text-[10px] uppercase font-bold bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-full text-[#181c20] shadow-sm border border-[#e0e2e8]">
+                      {asset.format_preset.replace("_", " ")}
+                    </span>
+                  </div>
+
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={(e) => handleDelete(asset.id, e)}
+                      className="w-8 h-8 rounded-full bg-white/90 text-red-600 hover:bg-white flex items-center justify-center shadow-md transition-all"
+                      title="Delete asset"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bottom Meta Tray */}
+                <div className="p-4 flex items-center justify-between bg-white border-t border-[#e0e2e8]">
+                  <div className="space-y-0.5">
+                    <div className="font-headline font-semibold text-xs text-[#181c20]">
+                      {asset.aspect_ratio || "4:5"} Canvas
+                    </div>
+                    <div className="font-mono text-[10px] text-[#777587]">
+                      {new Date(asset.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopyUrl(asset, e)}
+                      className="w-8 h-8 rounded-full hover:bg-[#f1f3f9] text-[#464555] flex items-center justify-center transition-colors"
+                      title="Copy URL"
+                    >
+                      {copiedId === asset.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleDownload(asset, e)}
+                      className="w-8 h-8 rounded-full bg-[#5046e5] text-white hover:bg-[#4338ca] flex items-center justify-center shadow-sm transition-all"
+                      title="Download"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Lightbox Modal */}
       {previewAsset && (
         <div
-          id="asset-lightbox-modal"
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
           onClick={() => setPreviewAsset(null)}
+          className="fixed inset-0 z-50 bg-[#181829]/70 backdrop-blur-md flex items-center justify-center p-4"
         >
           <div
-            className="w-full max-w-4xl bg-[#111317] border border-[#333842] rounded-lg p-3 space-y-3 shadow-2xl relative"
             onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl overflow-hidden shadow-2xl border border-[#e0e2e8] max-w-2xl w-full flex flex-col"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-[#232936]">
+            <div className="p-4 border-b border-[#e0e2e8] flex items-center justify-between bg-[#f7f9ff]">
               <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#4edea3] shadow-[0_0_6px_rgba(78,222,163,0.8)]" />
-                <span className="font-mono text-xs uppercase text-[#eef1f7] font-semibold">
-                  ASSET LIGHTBOX INSPECTOR
+                <span className="font-headline font-bold text-sm text-[#181c20]">
+                  {previewAsset.format_preset.replace("_", " ").toUpperCase()}
                 </span>
-                <span className="font-mono text-[9px] text-[#8f9194]">[{previewAsset.id}]</span>
+                <span className="font-mono text-xs text-[#777587]">
+                  ({previewAsset.aspect_ratio})
+                </span>
               </div>
               <button
                 type="button"
                 onClick={() => setPreviewAsset(null)}
-                className="p-1 text-[#8f9194] hover:text-white rounded-[1px]"
+                className="w-8 h-8 rounded-full hover:bg-[#e0e2e8] text-[#464555] flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Viewport */}
-            <div className="relative w-full max-h-[70vh] bg-[#0c0e12] rounded-[2px] overflow-hidden border border-black flex items-center justify-center">
+            <div className="bg-[#f1f3f9] p-6 flex items-center justify-center max-h-[65vh] overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={previewAsset.public_url}
-                alt="Enlarged asset"
-                className="max-h-[68vh] w-auto object-contain filter contrast-[1.02]"
+                alt="Preview"
+                className="max-h-[60vh] max-w-full rounded-2xl object-contain shadow-lg"
               />
             </div>
 
-            {/* Actions & Telemetry Footer */}
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-3 font-mono text-[9px] text-[#8f9194]">
-                <span>FORMAT: <span className="text-[#eef1f7]">{previewAsset.aspect_ratio}</span></span>
-                <span>•</span>
-                <span>RESOLUTION: <span className="text-[#eef1f7]">{previewAsset.width} × {previewAsset.height}</span></span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDownload(previewAsset)}
-                  className="h-7 px-3 rounded-[1px] bg-[#eef1f7] hover:bg-white text-[#0c0e12] font-mono text-[9px] uppercase font-semibold flex items-center gap-1.5"
-                >
-                  <Download className="w-3 h-3" />
-                  DOWNLOAD RAW
-                </button>
-              </div>
+            <div className="p-4 bg-white flex items-center justify-between border-t border-[#e0e2e8]">
+              <span className="font-mono text-xs text-[#464555]">
+                Lossless PNG Export · 300 DPI
+              </span>
+              <button
+                type="button"
+                onClick={() => handleDownload(previewAsset)}
+                className="px-5 py-2 rounded-full bg-[#5046e5] hover:bg-[#4338ca] text-white font-headline text-xs font-semibold flex items-center gap-2 shadow-sm transition-all"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Asset</span>
+              </button>
             </div>
           </div>
         </div>

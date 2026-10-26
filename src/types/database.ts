@@ -44,6 +44,8 @@ export interface BrandProfile {
   tenant_id: string;
   brand_name: string;
   logo_url: string | null;
+  logo_storage_path?: string | null;
+  logo_raster_storage_path?: string | null;
   primary_colour: string;
   secondary_colours: string[];
   typography: string | null;
@@ -60,6 +62,45 @@ export interface BrandProfile {
   updated_at: string;
 }
 
+export type AttachmentRole = "base_photo" | "supplementary" | "style_reference";
+
+export interface Attachment {
+  id: string;
+  tenant_id: string;
+  session_id: string;
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+  role: AttachmentRole;
+  public_url?: string;
+  created_at: string;
+}
+
+export interface PosterSpec {
+  version: number;
+  title: string;
+  subtitle?: string;
+  eventDate?: string;
+  otherText: string[];
+  layoutNotes: string;
+  styleDecisions: {
+    primaryColor: string;
+    accentColor: string;
+    typography: string;
+    mood: string;
+  };
+  attachmentRoles: Array<{
+    attachmentId: string;
+    storagePath: string;
+    role: AttachmentRole;
+    description?: string;
+  }>;
+  logoPosition: LogoPosition;
+  formatPreset: FormatPreset;
+  aspectRatio: AspectRatio;
+}
+
 export interface Conversation {
   id: string;
   tenant_id: string;
@@ -67,6 +108,8 @@ export interface Conversation {
   title: string;
   format_preset: FormatPreset;
   aspect_ratio: AspectRatio;
+  running_spec?: PosterSpec | null;
+  spec_version?: number;
   created_at: string;
   updated_at: string;
 }
@@ -109,6 +152,7 @@ export interface Asset {
   height: number;
   aspect_ratio: AspectRatio;
   format_preset: FormatPreset;
+  spec_version?: number;
   canva_design_id: string | null;
   canva_edit_url: string | null;
   canva_pushed_at: string | null;
